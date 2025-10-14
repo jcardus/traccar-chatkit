@@ -32,6 +32,7 @@ from .constants import INSTRUCTIONS, MODEL
 from .facts import Fact, fact_store
 from .memory_store import MemoryStore
 from .sample_widget import render_weather_widget, weather_widget_copy_text
+from .traccar import get
 from .weather import (
     WeatherLookupError,
     retrieve_weather,
@@ -39,8 +40,6 @@ from .weather import (
 from .weather import (
     normalize_unit as normalize_temperature_unit,
 )
-from .traccar import TraccarAPI
-import json
 
 # If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)
