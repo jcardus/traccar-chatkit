@@ -204,14 +204,25 @@ class FactAssistantServer(ChatKitServer[dict[str, Any]]):
         if agent_input is None:
             return
 
+        metadata = dict(getattr(thread, "metadata", {}) or {})
+        previous_response_id = metadata.get("previous_response_id")
+        agent_context.previous_response_id = previous_response_id
+
         result = Runner.run_streamed(
             self.assistant,
             agent_input,
             context=agent_context,
+            previous_response_id=previous_response_id,
         )
-
         async for event in stream_agent_response(agent_context, result):
             yield event
+
+        response_identifier = getattr(result, "last_response_id", None)
+        if response_identifier is not None:
+            metadata["previous_response_id"] = response_identifier
+            thread.metadata = metadata
+            await self.store.save_thread(thread, context)
+
         return
 
     async def to_message_content(self, _input: Attachment) -> ResponseInputContentParam:
