@@ -1,11 +1,24 @@
 import {defineConfig} from "vite";
 import react from "@vitejs/plugin-react-swc";
+import {createHtmlPlugin} from "vite-plugin-html";
+import {readFileSync} from "fs";
+import {resolve} from "path";
 
 const backendTarget = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8"));
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [react()],
+    plugins: [
+        react(),
+        createHtmlPlugin({
+            inject: {
+                data: {
+                    appVersion: packageJson.version,
+                },
+            },
+        }),
+    ],
     server: {
         port: 5170,
         host: "0.0.0.0",
@@ -29,4 +42,5 @@ export default defineConfig({
             ".trycloudflare.com",
         ],
     },
+    base: "/chat/",
 });
