@@ -86,13 +86,13 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
     return ThreadItemDoneEvent(item=item)
 
 
-class FactAgentContext(AgentContext):
+class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     store: Annotated[MemoryStore, Field(exclude=True)]
     request_context: dict[str, Any]
 
 
-async def _stream_saved_hidden(ctx: RunContextWrapper[FactAgentContext], fact: Fact) -> None:
+async def _stream_saved_hidden(ctx: RunContextWrapper[TraccarAgentContext], fact: Fact) -> None:
     await ctx.context.stream(
         ThreadItemDoneEvent(
             item=HiddenContextItem(
@@ -107,56 +107,6 @@ async def _stream_saved_hidden(ctx: RunContextWrapper[FactAgentContext], fact: F
     )
 
 
-@function_tool(description_override="Retrieve user devices")
-async def get_devices(
-    ctx: RunContextWrapper[FactAgentContext]
-) -> dict[str, str] | None:
-    request = ctx.context.request_context.get("request") if hasattr(ctx, "context") else None
-    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
-    headers = {"Cookie": cookie} if cookie else None
-    resp = get("api/devices", headers)
-    if getattr(resp, "status_code", 500) != 200:
-        logging.error("Traccar get devices failed: %s %s", getattr(resp, "status_code", None), getattr(resp, "text", None))
-        return None
-    return resp.json() if hasattr(resp, "json") else []
-
-
-@function_tool(
-    description_override="Switch the chat interface between light and dark color schemes."
-)
-async def switch_theme(
-    ctx: RunContextWrapper[FactAgentContext],
-    theme: str,
-) -> dict[str, str] | None:
-    logging.debug(f"Switching theme to {theme}")
-    try:
-        requested = _normalize_color_scheme(theme)
-        ctx.context.client_tool_call = ClientToolCall(
-            name=CLIENT_THEME_TOOL_NAME,
-            arguments={"theme": requested},
-        )
-        return {"theme": requested}
-    except Exception:
-        logging.exception("Failed to switch theme")
-        return None
-
-
-@function_tool(
-    description_override="get device positions"
-)
-async def get_positions(
-    ctx: RunContextWrapper[FactAgentContext]
-) -> dict[str, str | None]:
-    request = ctx.context.request_context.get("request") if hasattr(ctx, "context") else None
-    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
-    headers = {"Cookie": cookie} if cookie else None
-    resp = get("api/positions", headers)
-    if getattr(resp, "status_code", 500) != 200:
-        logging.error("Traccar get devices failed: %s %s", getattr(resp, "status_code", None), getattr(resp, "text", None))
-        return None
-    return resp.json() if hasattr(resp, "json") else []
-
-
 def _user_message_text(item: UserMessageItem) -> str:
     parts: list[str] = []
     for part in item.content:
@@ -166,18 +116,16 @@ def _user_message_text(item: UserMessageItem) -> str:
     return " ".join(parts).strip()
 
 
-class FactAssistantServer(ChatKitServer[dict[str, Any]]):
-    """ChatKit server wired up with the fact-recording tool."""
-
+class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
         self.store: MemoryStore = MemoryStore()
         super().__init__(self.store)
-        tools = [get_devices, get_positions]
-        self.assistant = Agent[FactAgentContext](
+        tools = [get_devices, get_positions, get_device_trips, get_session, get_device_positions]
+        self.assistant = Agent[TraccarAgentContext](
             model=MODEL,
-            name="ChatKit Guide",
+            name="Traccar Assistant",
             instructions=INSTRUCTIONS,
-            tools=tools,  # type: ignore[arg-type]
+            tools=tools
         )
         self._thread_item_converter = self._init_thread_item_converter()
 
@@ -187,7 +135,7 @@ class FactAssistantServer(ChatKitServer[dict[str, Any]]):
         item: UserMessageItem | None,
         context: dict[str, Any],
     ) -> AsyncIterator[ThreadStreamEvent]:
-        agent_context = FactAgentContext(
+        agent_context = TraccarAgentContext(
             thread=thread,
             store=self.store,
             request_context=context,
@@ -330,6 +278,71 @@ class FactAssistantServer(ChatKitServer[dict[str, Any]]):
         )
 
 
-def create_chatkit_server() -> FactAssistantServer | None:
+def create_chatkit_server() -> TraccarAssistantServer | None:
     """Return a configured ChatKit server instance if dependencies are available."""
-    return FactAssistantServer()
+    return TraccarAssistantServer()
+
+
+@function_tool(description_override="get devices")
+async def get_devices(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
+    return get("api/devices", ctx.context.request_context.get("request"))
+
+@function_tool(description_override="get current user session")
+async def get_session(ctx: RunContextWrapper[TraccarAgentContext]) -> dict[str, Any] | None:
+    return get("api/session", ctx.context.request_context.get("request"))
+
+@function_tool(description_override="get last known position for all devices")
+async def get_positions(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
+    return get("api/positions", ctx.context.request_context.get("request"))
+
+@function_tool(description_override="get device positions for a given date range")
+async def get_device_positions(
+    ctx: RunContextWrapper[TraccarAgentContext],
+        device_id: int,
+        from_date: datetime,
+        to_date: datetime
+) -> list[dict[str, Any]] | None:
+    resp = get("api/reports/route", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+    # Remove 'raw' field from each position to reduce data size
+    if resp and isinstance(resp, list):
+        return [{k: v for k, v in pos.items() if k != 'raw'} for pos in resp]
+    return resp
+
+
+@function_tool(description_override="get device events for a given date range")
+async def get_device_events(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        device_id: int,
+        from_date: datetime,
+        to_date: datetime
+) -> list[dict[str, Any]] | None:
+    return get("api/reports/events", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+
+@function_tool(description_override="get device summary data (maximum speed, average speed, distance travelled, spent fuel and engine hours) for a given date range")
+async def get_device_summary(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        device_id: int,
+        from_date: datetime,
+        to_date: datetime
+) -> list[dict[str, Any]] | None:
+    return get("api/reports/summary", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+
+
+@function_tool(description_override="get device trips for a given date range. 'from_date' and 'to_date' should include timezone")
+async def get_device_trips(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        device_id: int,
+        from_date: datetime,
+        to_date: datetime
+) -> list[dict[str, Any]] | None:
+    return get("api/reports/trips", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+
+@function_tool(description_override="get device stops for a given date range")
+async def get_device_stops(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        device_id: int,
+        from_date: datetime,
+        to_date: datetime
+) -> list[dict[str, Any]] | None:
+    return get("api/reports/stops", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+

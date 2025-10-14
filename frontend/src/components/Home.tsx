@@ -33,6 +33,9 @@ export default function Home({
             onThemeRequest={handleThemeChange}
           />
         </div>
+        <div className="">
+          <ThemeToggle value={scheme} onChange={handleThemeChange}  />
+        </div>
       </div>
     </div>
   );

@@ -90,7 +90,7 @@ export function ChatKitPanel({
 
   return (
     <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">
-      <ChatKit control={chatkit.control} className="block h-full w-full" />
+      <ChatKit control={chatkit.control} className="block h-full w-full"  />
     </div>
   );
 }

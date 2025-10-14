@@ -10,17 +10,17 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.responses import JSONResponse
 
 from .chat import (
-    FactAssistantServer,
+    TraccarAssistantServer,
     create_chatkit_server,
 )
 from .facts import fact_store
 
 app = FastAPI(title="ChatKit API")
 
-_chatkit_server: FactAssistantServer | None = create_chatkit_server()
+_chatkit_server: TraccarAssistantServer | None = create_chatkit_server()
 
 
-def get_chatkit_server() -> FactAssistantServer:
+def get_chatkit_server() -> TraccarAssistantServer:
     if _chatkit_server is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -34,7 +34,7 @@ def get_chatkit_server() -> FactAssistantServer:
 
 @app.post("/chatkit")
 async def chatkit_endpoint(
-    request: Request, server: FactAssistantServer = Depends(get_chatkit_server)
+    request: Request, server: TraccarAssistantServer = Depends(get_chatkit_server)
 ) -> Response:
     payload = await request.body()
     result = await server.process(payload, {"request": request})
