@@ -17,4 +17,4 @@ INSTRUCTIONS: Final[str] = (
 "\n\n"
 )
 
-MODEL = "gpt-4.1-mini"
+MODEL = "gpt-5-nano"
