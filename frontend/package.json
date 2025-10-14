@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prepreview": "vite build",
+    "build": "vite build",
+    "prepreview": "npm run build",
     "preview": "npx wrangler pages dev dist",
     "lint": "eslint . --ext ts,tsx"
   },
