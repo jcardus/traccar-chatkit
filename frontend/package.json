@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "postbuild": "mkdir -p dist/chat && mv dist/assets dist/index.html dist/chat/",
     "prepreview": "npm run build",
     "preview": "npx wrangler pages dev dist",
     "lint": "eslint . --ext ts,tsx"
