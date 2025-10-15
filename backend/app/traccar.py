@@ -1,10 +1,13 @@
-import os
 import requests
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
-def _get_traccar_url():
-    return os.environ.get("TRACCAR_URL") or "http://gps.frotaweb.com"
+def _get_traccar_url(request):
+    origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
+    print(f"Request origin: {origin}")
+    if origin and (origin.startswith("https://moviflotte.com") or origin.startswith("https://localizalia.net")):
+        return "http://gps.fleetmap.pt"
+    return "http://gps.frotaweb.com"
 
 def _format_date(value):
     """Convert datetime objects to UTC and format as ISO 8601 with Z suffix"""
@@ -28,7 +31,7 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
         params["to"] = _format_date(to_date)
 
     # Build full URL with query parameters
-    url = f"{_get_traccar_url().rstrip('/')}/{path.lstrip('/')}"
+    url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
     if params:
         url += f"?{urlencode(params)}"
 
@@ -42,13 +45,4 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
     else:
         print(json)
     return json
-
-def post(self, path, json):
-    return requests.post(f"{_get_traccar_url().rstrip('/')}/{path.lstrip('/')}", json=json)
-
-def put(self, path, json):
-    return requests.put(f"{_get_traccar_url().rstrip('/')}/{path.lstrip('/')}", json=json)
-
-def delete(self, path):
-    return requests.delete(f"{_get_traccar_url().rstrip('/')}/{path.lstrip('/')}")
 
