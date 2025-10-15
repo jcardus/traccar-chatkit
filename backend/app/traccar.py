@@ -52,3 +52,31 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
         print(json)
     return json
 
+
+def put(path, request, name=None, description=None, area=None):
+    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
+    headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
+
+    # Build request body with provided parameters
+    body = {}
+    if name is not None:
+        body["name"] = name
+    if description is not None:
+        body["description"] = description
+    if area is not None:
+        body["area"] = area
+
+    # Build full URL
+    url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
+
+    print("TRACCAR PUT: " + url)
+    print(f"Body: {body}")
+    response = requests.put(url, headers=headers, json=body)
+    response.raise_for_status()  # Raise an exception for bad status codes
+    json = response.json()
+    # Print only first few items if response is a list
+    if isinstance(json, list):
+        print(f"Response: {len(json)} items, first 3: {json[:3]}")
+    else:
+        print(json)
+    return json
