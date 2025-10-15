@@ -101,6 +101,8 @@ class SQLiteStore(Store[dict[str, Any]]):
             cursor.execute("SELECT id, data FROM threads")
             for thread_id, thread_json in cursor.fetchall():
                 thread_data = json.loads(thread_json)
+                # Remove 'items' field if present (for backwards compatibility with old data)
+                thread_data.pop('items', None)
                 thread = ThreadMetadata.model_validate(thread_data)
 
                 # Load items for this thread
@@ -158,7 +160,9 @@ class SQLiteStore(Store[dict[str, Any]]):
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
-            thread_json = thread.model_dump_json()
+            # Exclude 'items' field when saving to ensure we only save ThreadMetadata
+            thread_dict = thread.model_dump(exclude={'items'})
+            thread_json = json.dumps(thread_dict, default=str)
             created_at = thread.created_at or datetime.utcnow()
             updated_at = datetime.utcnow()
 
