@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 from datetime import datetime
-from typing import Annotated, Any, AsyncIterator, Final
+from pathlib import Path
+from typing import Annotated, Any, AsyncIterator, Final, Coroutine
 from uuid import uuid4
 
 from agents import Agent, RunContextWrapper, Runner, function_tool
@@ -38,6 +40,8 @@ logging.basicConfig(level=logging.INFO)
 
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
+REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
+MAX_ROWS_THRESHOLD: Final[int] = 200
 
 
 def _normalize_color_scheme(value: str) -> str:
@@ -53,6 +57,24 @@ def _normalize_color_scheme(value: str) -> str:
 
 def _gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:8]}"
+
+
+def _save_large_response(data: list[dict[str, Any]], report_type: str) -> str:
+    """Save large response to a file and return the file URL."""
+    # Ensure reports directory exists
+    REPORTS_DIR.mkdir(exist_ok=True)
+
+    # Generate unique filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{report_type}_{timestamp}_{uuid4().hex[:8]}.json"
+    file_path = REPORTS_DIR / filename
+
+    # Write data to file
+    with open(file_path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+    # Return URL path that will be served by the API
+    return f"/chatkit/{filename}"
 
 
 def _is_tool_completion_item(item: Any) -> bool:
@@ -301,11 +323,16 @@ async def get_device_positions(
         device_id: int,
         from_date: datetime,
         to_date: datetime
-) -> list[dict[str, Any]] | None:
+) -> str | list[dict[Any, Any]] | Any:
     resp = get("api/reports/route", ctx.context.request_context.get("request"), device_id, from_date, to_date)
     # Remove 'raw' field from each position to reduce data size
     if resp and isinstance(resp, list):
-        return [{k: v for k, v in pos.items() if k != 'raw'} for pos in resp]
+        cleaned_data = [{k: v for k, v in pos.items() if k != 'raw'} for pos in resp]
+        if len(cleaned_data) > MAX_ROWS_THRESHOLD:
+            file_url = _save_large_response(cleaned_data, "positions")
+            print("file_url", file_url)
+            return file_url
+        return cleaned_data
     return resp
 
 

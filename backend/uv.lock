@@ -105,6 +105,7 @@ dependencies = [
     { name = "httpx" },
     { name = "openai" },
     { name = "openai-chatkit" },
+    { name = "requests" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -123,6 +124,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.40" },
     { name = "openai-chatkit" },
     { name = "openai-chatkit", marker = "extra == 'dev'", specifier = ">=0.0.2" },
+    { name = "requests" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.4,<0.7" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.36,<0.37" },
 ]
