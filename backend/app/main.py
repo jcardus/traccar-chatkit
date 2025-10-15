@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from chatkit.server import StreamingResult
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -14,7 +12,6 @@ from .chat import (
     TraccarAssistantServer,
     create_chatkit_server,
 )
-from .facts import fact_store
 
 app = FastAPI(title="ChatKit API")
 

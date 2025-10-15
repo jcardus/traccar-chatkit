@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator, Final, Coroutine
+from typing import Annotated, Any, AsyncIterator, Final
 from uuid import uuid4
 
 from agents import Agent, RunContextWrapper, Runner, function_tool
