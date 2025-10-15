@@ -13,10 +13,7 @@ export default function Home({
   scheme: ColorScheme;
   handleThemeChange: (scheme: ColorScheme) => void;
 }) {
-  const [mapData, setMapData] = useState({
-    type: "FeatureCollection",
-    features: []
-  });
+  const [mapData, setMapData] = useState(null );
 
   const containerClass = clsx(
     "min-h-screen bg-gradient-to-br transition-colors duration-300",

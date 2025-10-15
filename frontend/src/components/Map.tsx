@@ -7,10 +7,10 @@ export default function GeoJsonMapGL({ data }) {
     const mapRef = useRef(null);
     useEffect(() => {
         if (!mapRef.current || !data) return;
-        mapRef.current.fitBounds(bbox(data), { padding: 40, duration: 1000 });
+        setTimeout(() => {mapRef.current.fitBounds(bbox(data), { padding: 40, duration: 1000 })}, 1000)
     }, [data]);
 
-    return (
+    return data && (
         <Map
             ref={mapRef}
             initialViewState={{ longitude: 0, latitude: 0, zoom: 2 }}
