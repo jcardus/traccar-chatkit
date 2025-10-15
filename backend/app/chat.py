@@ -32,7 +32,7 @@ from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .facts import Fact
-from .memory_store import MemoryStore
+from .memory_store import SQLiteStore
 from .traccar import get
 
 # If you want to check what's going on under the hood, set this to DEBUG
@@ -102,7 +102,7 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
 
 class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    store: Annotated[MemoryStore, Field(exclude=True)]
+    store: Annotated[SQLiteStore, Field(exclude=True)]
     request_context: dict[str, Any]
 
 
@@ -132,7 +132,7 @@ def _user_message_text(item: UserMessageItem) -> str:
 
 class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
-        self.store: MemoryStore = MemoryStore()
+        self.store: SQLiteStore = SQLiteStore()
         super().__init__(self.store)
         tools = [
             get_device_events,
