@@ -48,9 +48,8 @@ class SQLiteStore(Store[dict[str, Any]]):
         # Initialize database
         self._init_db()
 
-        # In-memory cache for performance
+        # In-memory cache for performance (per-user caches)
         self._threads: Dict[str, _ThreadState] = {}
-        self._load_from_db()
 
         # Attachments intentionally unsupported; use a real store that enforces auth.
 
@@ -91,33 +90,36 @@ class SQLiteStore(Store[dict[str, Any]]):
         finally:
             conn.close()
 
-    def _load_from_db(self) -> None:
-        """Load all data from database into memory cache."""
+    def _load_thread_from_db(self, thread_id: str) -> _ThreadState | None:
+        """Load a specific thread from database."""
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
 
-            # Load all threads
-            cursor.execute("SELECT id, data FROM threads")
-            for thread_id, thread_json in cursor.fetchall():
-                thread_data = json.loads(thread_json)
-                # Remove 'items' field if present (for backwards compatibility with old data)
-                thread_data.pop('items', None)
-                thread = ThreadMetadata.model_validate(thread_data)
+            # Load thread metadata
+            cursor.execute("SELECT data FROM threads WHERE id = ?", (thread_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
 
-                # Load items for this thread
-                cursor.execute(
-                    "SELECT data FROM thread_items WHERE thread_id = ? ORDER BY created_at",
-                    (thread_id,)
-                )
-                items = []
-                for (item_json,) in cursor.fetchall():
-                    item_data = json.loads(item_json)
-                    # Reconstruct the appropriate ThreadItem subclass
-                    item = self._deserialize_thread_item(item_data)
-                    items.append(item)
+            thread_data = json.loads(row[0])
+            # Remove 'items' field if present (for backwards compatibility with old data)
+            thread_data.pop('items', None)
+            thread = ThreadMetadata.model_validate(thread_data)
 
-                self._threads[thread_id] = _ThreadState(thread=thread, items=items)
+            # Load items for this thread
+            cursor.execute(
+                "SELECT data FROM thread_items WHERE thread_id = ? ORDER BY created_at",
+                (thread_id,)
+            )
+            items = []
+            for (item_json,) in cursor.fetchall():
+                item_data = json.loads(item_json)
+                # Reconstruct the appropriate ThreadItem subclass
+                item = self._deserialize_thread_item(item_data)
+                items.append(item)
+
+            return _ThreadState(thread=thread, items=items)
         finally:
             conn.close()
 
@@ -141,9 +143,15 @@ class SQLiteStore(Store[dict[str, Any]]):
 
     # -- Thread metadata -------------------------------------------------
     async def load_thread(self, thread_id: str, context: dict[str, Any]) -> ThreadMetadata:
+        # Check cache first
         state = self._threads.get(thread_id)
         if not state:
-            raise NotFoundError(f"Thread {thread_id} not found")
+            # Load from database
+            state = self._load_thread_from_db(thread_id)
+            if not state:
+                raise NotFoundError(f"Thread {thread_id} not found")
+            # Cache it
+            self._threads[thread_id] = state
         return state.thread.model_copy(deep=True)
 
     async def save_thread(self, thread: ThreadMetadata, context: dict[str, Any]) -> None:
@@ -182,12 +190,29 @@ class SQLiteStore(Store[dict[str, Any]]):
         order: str,
         context: dict[str, Any],
     ) -> Page[ThreadMetadata]:
-        threads = sorted(
-            (state.thread.model_copy(deep=True) for state in self._threads.values()),
+        # Load threads directly from database
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, data FROM threads")
+
+            threads = []
+            for thread_id, thread_json in cursor.fetchall():
+                thread_data = json.loads(thread_json)
+                # Remove 'items' field if present (for backwards compatibility)
+                thread_data.pop('items', None)
+                thread = ThreadMetadata.model_validate(thread_data)
+                threads.append(thread)
+        finally:
+            conn.close()
+
+        # Sort threads
+        threads.sort(
             key=lambda t: t.created_at or datetime.min,
             reverse=(order == "desc"),
         )
 
+        # Handle pagination
         if after:
             index_map = {thread.id: idx for idx, thread in enumerate(threads)}
             start = index_map.get(after, -1) + 1
