@@ -1,8 +1,10 @@
 import clsx from "clsx";
+import { useState } from "react";
 
 import { ChatKitPanel } from "./ChatKitPanel";
 import { ThemeToggle } from "./ThemeToggle";
 import { ColorScheme } from "../hooks/useColorScheme";
+import Map from "./Map";
 
 export default function Home({
   scheme,
@@ -11,6 +13,10 @@ export default function Home({
   scheme: ColorScheme;
   handleThemeChange: (scheme: ColorScheme) => void;
 }) {
+  const [mapData, setMapData] = useState({
+    type: "FeatureCollection",
+    features: []
+  });
 
   const containerClass = clsx(
     "min-h-screen bg-gradient-to-br transition-colors duration-300",
@@ -19,7 +25,15 @@ export default function Home({
       : "from-slate-100 via-white to-slate-200 text-slate-900"
   );
 
-  const onShowMap = (invocation) => console.log('onClientTool', invocation)
+  const onShowMap = (invocation: { params: { geojson: string; }; }) => {
+    console.log('onClientTool', invocation);
+    if (invocation?.params?.geojson) {
+        const geojsonData = typeof invocation.params.geojson === 'string'
+          ? JSON.parse(invocation.params.geojson)
+          : invocation.params.geojson;
+        setMapData(geojsonData);
+    }
+  }
 
   return (
     <div className={containerClass}>
@@ -32,6 +46,7 @@ export default function Home({
               theme={scheme}
               onShowMap={onShowMap}
           />
+          <Map data={mapData}></Map>
         </div>
       </div>
     </div>

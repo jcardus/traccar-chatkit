@@ -403,6 +403,6 @@ async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) ->
     print("show_map called")
     ctx.context.client_tool_call = ClientToolCall(
         name="show_map",
-        arguments={"geosjon": geojson},
+        arguments={"geojson": geojson},
     )
     return {"result": "success"}
