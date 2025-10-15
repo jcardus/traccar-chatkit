@@ -53,51 +53,45 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
     return json
 
 
-def put(path, request, id=None, name=None, description=None, area=None):
+def _make_request_with_body(method, path, request, _id=None, name=None, description=None, area=None):
+    """Common function for PUT and POST requests with JSON body."""
     cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
     headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
+
     # Build request body with provided parameters
-    body = get_body(area, description, name, id)
-    # Build full URL
-    url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
-    print("TRACCAR PUT: " + url)
-    print(f"Body: {body}")
-    response = requests.put(url, headers=headers, json=body)
-    response.raise_for_status()  # Raise an exception for bad status codes
-    json = response.json()
-    # Print only first few items if response is a list
-    if isinstance(json, list):
-        print(f"Response: {len(json)} items, first 3: {json[:3]}")
-    else:
-        print(json)
-    return json
-
-def post(path, request, name=None, description=None, area=None):
-    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
-    headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
-    # Build request body with provided parameters
-    body = get_body(area, description, name)
-    # Build full URL
-    url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
-    print("TRACCAR POST: " + url)
-    print(f"Body: {body}")
-    response = requests.post(url, headers=headers, json=body)
-    response.raise_for_status()  # Raise an exception for bad status codes
-    json = response.json()
-    # Print only first few items if response is a list
-    if isinstance(json, list):
-        print(f"Response: {len(json)} items, first 3: {json[:3]}")
-    else:
-        print(json)
-    return json
-
-
-def get_body(area, description, name, _id=0) -> dict[str, int]:
-    body = {"id": _id}
+    body = {}
+    if _id is not None:
+        body["id"] = _id
     if name is not None:
         body["name"] = name
     if description is not None:
         body["description"] = description
     if area is not None:
         body["area"] = area
-    return body
+
+    # Build full URL
+    url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
+
+    print(f"TRACCAR {method.upper()}: {url}")
+    print(f"Body: {body}")
+
+    # Make request with the specified method
+    response = requests.request(method, url, headers=headers, json=body)
+    response.raise_for_status()  # Raise an exception for bad status codes
+    json_response = response.json()
+
+    # Print only first few items if response is a list
+    if isinstance(json_response, list):
+        print(f"Response: {len(json_response)} items, first 3: {json_response[:3]}")
+    else:
+        print(json_response)
+
+    return json_response
+
+
+def put(path, request, id=None, name=None, description=None, area=None):
+    return _make_request_with_body("PUT", path, request, id, name, description, area)
+
+
+def post(path, request, name=None, description=None, area=None):
+    return _make_request_with_body("POST", path, request, None, name, description, area)
