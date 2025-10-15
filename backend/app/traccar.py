@@ -5,7 +5,13 @@ from urllib.parse import urlencode
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
     print(f"Request origin: {origin}")
-    if origin and (origin.startswith("https://moviflotte.com") or origin.startswith("https://localizalia.net")):
+    fleetmap_origins = [
+        "https://moviflotte.com",
+        "https://localizalia.net",
+        "https://web.fleetrack.cl",
+        "https://nogartel.fleetmap.io"
+    ]
+    if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "http://gps.fleetmap.pt"
     return "http://gps.frotaweb.com"
 
