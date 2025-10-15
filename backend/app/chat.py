@@ -33,7 +33,7 @@ from pydantic import ConfigDict, Field
 from .constants import INSTRUCTIONS, MODEL
 from .facts import Fact
 from .memory_store import SQLiteStore
-from .traccar import get, put
+from .traccar import get, put, post
 
 # If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)
@@ -144,7 +144,8 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_positions,
             get_session,
             get_geofences,
-            update_geofence]
+            update_geofence,
+            create_geofence]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL,
             name="Traccar Assistant",
@@ -384,7 +385,16 @@ async def update_geofence(
         ctx: RunContextWrapper[TraccarAgentContext],
         geofence_id: int,
         area: str,
-        name: str
+        name: str,
+        description: str | None = None
 ) -> list[dict[str, Any]] | None:
-    return put(f"api/geofences/{geofence_id}", ctx.context.request_context.get("request"), area=area, name=name)
+    return put(f"api/geofences/{geofence_id}", ctx.context.request_context.get("request"), id=geofence_id, area=area, name=name, description=description)
 
+@function_tool(description_override="create a geofence, area is a wkt string, coordinate order is lat,lon")
+async def create_geofence(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        area: str,
+        name: str,
+        description: str | None = None
+) -> list[dict[str, Any]] | None:
+    return post(f"api/geofences", ctx.context.request_context.get("request"), area=area, name=name, description=description)

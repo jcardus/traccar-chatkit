@@ -53,22 +53,13 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
     return json
 
 
-def put(path, request, name=None, description=None, area=None):
+def put(path, request, id=None, name=None, description=None, area=None):
     cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
     headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
-
     # Build request body with provided parameters
-    body = {}
-    if name is not None:
-        body["name"] = name
-    if description is not None:
-        body["description"] = description
-    if area is not None:
-        body["area"] = area
-
+    body = get_body(area, description, name, id)
     # Build full URL
     url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
-
     print("TRACCAR PUT: " + url)
     print(f"Body: {body}")
     response = requests.put(url, headers=headers, json=body)
@@ -80,3 +71,33 @@ def put(path, request, name=None, description=None, area=None):
     else:
         print(json)
     return json
+
+def post(path, request, name=None, description=None, area=None):
+    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
+    headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
+    # Build request body with provided parameters
+    body = get_body(area, description, name)
+    # Build full URL
+    url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
+    print("TRACCAR POST: " + url)
+    print(f"Body: {body}")
+    response = requests.post(url, headers=headers, json=body)
+    response.raise_for_status()  # Raise an exception for bad status codes
+    json = response.json()
+    # Print only first few items if response is a list
+    if isinstance(json, list):
+        print(f"Response: {len(json)} items, first 3: {json[:3]}")
+    else:
+        print(json)
+    return json
+
+
+def get_body(area, description, name, _id=0) -> dict[str, int]:
+    body = {"id": _id}
+    if name is not None:
+        body["name"] = name
+    if description is not None:
+        body["description"] = description
+    if area is not None:
+        body["area"] = area
+    return body

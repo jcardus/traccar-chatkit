@@ -50,9 +50,6 @@ class SQLiteStore(Store[dict[str, Any]]):
         # Initialize database
         self._init_db()
 
-        # In-memory cache for performance (per-user caches)
-        self._threads: Dict[str, _ThreadState] = {}
-
         # Attachments intentionally unsupported; use a real store that enforces auth.
 
     def _init_db(self) -> None:
@@ -165,33 +162,13 @@ class SQLiteStore(Store[dict[str, Any]]):
 
     # -- Thread metadata -------------------------------------------------
     async def load_thread(self, thread_id: str, context: dict[str, Any]) -> ThreadMetadata:
-        # Check cache first
-        state = self._threads.get(thread_id)
+        # Load from database
+        state = self._load_thread_from_db(thread_id)
         if not state:
-            # Load from database
-            state = self._load_thread_from_db(thread_id)
-            if not state:
-                raise NotFoundError(f"Thread {thread_id} not found")
-            # Cache it
-            self._threads[thread_id] = state
-
-        # Return a copy, ensuring items field is excluded
-        thread_copy = state.thread.model_copy(deep=True)
-        # Defensive: ensure no 'items' attribute exists
-        if hasattr(thread_copy, 'items'):
-            delattr(thread_copy, 'items')
-        return thread_copy
+            raise NotFoundError(f"Thread {thread_id} not found")
+        return state.thread.model_copy(deep=True)
 
     async def save_thread(self, thread: ThreadMetadata, context: dict[str, Any]) -> None:
-        state = self._threads.get(thread.id)
-        if state:
-            state.thread = thread.model_copy(deep=True)
-        else:
-            self._threads[thread.id] = _ThreadState(
-                thread=thread.model_copy(deep=True),
-                items=[],
-            )
-
         # Persist to a database
         conn = sqlite3.connect(self.db_path)
         try:
@@ -266,8 +243,6 @@ class SQLiteStore(Store[dict[str, Any]]):
         )
 
     async def delete_thread(self, thread_id: str, context: dict[str, Any]) -> None:
-        self._threads.pop(thread_id, None)
-
         # Delete from database
         conn = sqlite3.connect(self.db_path)
         try:
@@ -279,15 +254,23 @@ class SQLiteStore(Store[dict[str, Any]]):
             conn.close()
 
     # -- Thread items ----------------------------------------------------
-    def _items(self, thread_id: str) -> List[ThreadItem]:
-        state = self._threads.get(thread_id)
-        if state is None:
-            state = _ThreadState(
-                thread=ThreadMetadata(id=thread_id, created_at=datetime.utcnow()),
-                items=[],
+    def _load_items_from_db(self, thread_id: str) -> List[ThreadItem]:
+        """Load thread items from database."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT data FROM thread_items WHERE thread_id = ? ORDER BY created_at",
+                (thread_id,)
             )
-            self._threads[thread_id] = state
-        return state.items
+            items = []
+            for (item_json,) in cursor.fetchall():
+                item_data = json.loads(item_json)
+                item = self._deserialize_thread_item(item_data)
+                items.append(item)
+            return items
+        finally:
+            conn.close()
 
     async def load_thread_items(
         self,
@@ -297,7 +280,7 @@ class SQLiteStore(Store[dict[str, Any]]):
         order: str,
         context: dict[str, Any],
     ) -> Page[ThreadItem]:
-        items = [item.model_copy(deep=True) for item in self._items(thread_id)]
+        items = [item.model_copy(deep=True) for item in self._load_items_from_db(thread_id)]
         items.sort(
             key=lambda item: getattr(item, "created_at", datetime.utcnow()),
             reverse=(order == "desc"),
@@ -318,8 +301,6 @@ class SQLiteStore(Store[dict[str, Any]]):
     async def add_thread_item(
         self, thread_id: str, item: ThreadItem, context: dict[str, Any]
     ) -> None:
-        self._items(thread_id).append(item.model_copy(deep=True))
-
         # Persist to a database
         conn = sqlite3.connect(self.db_path)
         try:
@@ -337,13 +318,6 @@ class SQLiteStore(Store[dict[str, Any]]):
             conn.close()
 
     async def save_item(self, thread_id: str, item: ThreadItem, context: dict[str, Any]) -> None:
-        items = self._items(thread_id)
-        for idx, existing in enumerate(items):
-            if existing.id == item.id:
-                items[idx] = item.model_copy(deep=True)
-                return
-        items.append(item.model_copy(deep=True))
-
         # Persist to a database
         conn = sqlite3.connect(self.db_path)
         try:
@@ -361,7 +335,8 @@ class SQLiteStore(Store[dict[str, Any]]):
             conn.close()
 
     async def load_item(self, thread_id: str, item_id: str, context: dict[str, Any]) -> ThreadItem:
-        for item in self._items(thread_id):
+        items = self._load_items_from_db(thread_id)
+        for item in items:
             if item.id == item_id:
                 return item.model_copy(deep=True)
         raise NotFoundError(f"Item {item_id} not found")
@@ -369,9 +344,6 @@ class SQLiteStore(Store[dict[str, Any]]):
     async def delete_thread_item(
         self, thread_id: str, item_id: str, context: dict[str, Any]
     ) -> None:
-        items = self._items(thread_id)
-        self._threads[thread_id].items = [item for item in items if item.id != item_id]
-
         # Delete from database
         conn = sqlite3.connect(self.db_path)
         try:
