@@ -31,7 +31,6 @@ from openai.types.responses import ResponseInputContentParam
 from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
-from .facts import Fact
 from .memory_store import SQLiteStore
 from .traccar import get, put, post
 
@@ -145,7 +144,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_session,
             get_geofences,
             update_geofence,
-            create_geofence]
+            create_geofence, show_map]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL,
             name="Traccar Assistant",
@@ -398,3 +397,12 @@ async def create_geofence(
         description: str | None = None
 ) -> list[dict[str, Any]] | None:
     return post(f"api/geofences", ctx.context.request_context.get("request"), area=area, name=name, description=description)
+
+@function_tool(description_override="Show a map with the provided GeoJSON")
+async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) -> dict[str, str] | None:
+    print("show_map called")
+    ctx.context.client_tool_call = ClientToolCall(
+        name="show_map",
+        arguments={"geosjon": geojson},
+    )
+    return {"result": "success"}

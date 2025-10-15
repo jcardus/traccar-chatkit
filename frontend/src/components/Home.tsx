@@ -3,7 +3,6 @@ import clsx from "clsx";
 import { ChatKitPanel } from "./ChatKitPanel";
 import { ThemeToggle } from "./ThemeToggle";
 import { ColorScheme } from "../hooks/useColorScheme";
-import { useFacts } from "../hooks/useFacts";
 
 export default function Home({
   scheme,
@@ -12,7 +11,6 @@ export default function Home({
   scheme: ColorScheme;
   handleThemeChange: (scheme: ColorScheme) => void;
 }) {
-  const { refresh, performAction } = useFacts();
 
   const containerClass = clsx(
     "min-h-screen bg-gradient-to-br transition-colors duration-300",
@@ -20,6 +18,8 @@ export default function Home({
       ? "from-slate-900 via-slate-950 to-slate-850 text-slate-100"
       : "from-slate-100 via-white to-slate-200 text-slate-900"
   );
+
+  const onShowMap = (invocation) => console.log('onClientTool', invocation)
 
   return (
     <div className={containerClass}>
@@ -29,10 +29,8 @@ export default function Home({
             <ThemeToggle value={scheme} onChange={handleThemeChange}  />
           </div>
           <ChatKitPanel
-            theme={scheme}
-            onWidgetAction={performAction}
-            onResponseEnd={refresh}
-            onThemeRequest={handleThemeChange}
+              theme={scheme}
+              onShowMap={onShowMap}
           />
         </div>
       </div>

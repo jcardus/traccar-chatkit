@@ -52,7 +52,6 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
         print(json)
     return json
 
-
 def _make_request_with_body(method, path, request, _id=None, name=None, description=None, area=None):
     """Common function for PUT and POST requests with JSON body."""
     cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
@@ -88,10 +87,8 @@ def _make_request_with_body(method, path, request, _id=None, name=None, descript
 
     return json_response
 
-
 def put(path, request, id=None, name=None, description=None, area=None):
     return _make_request_with_body("PUT", path, request, id, name, description, area)
-
 
 def post(path, request, name=None, description=None, area=None):
     return _make_request_with_body("POST", path, request, None, name, description, area)

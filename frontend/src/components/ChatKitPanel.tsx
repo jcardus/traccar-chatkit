@@ -1,27 +1,19 @@
-import { useRef } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   CHATKIT_API_URL,
   CHATKIT_API_DOMAIN_KEY,
-  PLACEHOLDER_INPUT,
 } from "../lib/config";
-import type { FactAction } from "../hooks/useFacts";
 import type { ColorScheme } from "../hooks/useColorScheme";
 
 type ChatKitPanelProps = {
   theme: ColorScheme;
-  onWidgetAction: (action: FactAction) => Promise<void>;
-  onResponseEnd: () => void;
-  onThemeRequest: (scheme: ColorScheme) => void;
+  onShowMap: (invocation) => void;
 };
 
 export function ChatKitPanel({
   theme,
-  onWidgetAction,
-  onResponseEnd,
-  onThemeRequest,
+  onShowMap,
 }: ChatKitPanelProps) {
-  const processedFacts = useRef(new Set<string>());
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
@@ -40,52 +32,17 @@ export function ChatKitPanel({
       },
       radius: "round",
     },
-    composer: {
-      placeholder: PLACEHOLDER_INPUT,
-    },
     threadItemActions: {
       feedback: false,
     },
     onClientTool: async (invocation) => {
-      if (invocation.name === "switch_theme") {
-        const requested = invocation.params.theme;
-        if (requested === "light" || requested === "dark") {
-          if (import.meta.env.DEV) {
-            console.debug("[ChatKitPanel] switch_theme", requested);
-          }
-          onThemeRequest(requested);
-          return { success: true };
-        }
-        return { success: false };
-      }
-
-      if (invocation.name === "record_fact") {
-        const id = String(invocation.params.fact_id ?? "");
-        const text = String(invocation.params.fact_text ?? "");
-        if (!id || processedFacts.current.has(id)) {
-          return { success: true };
-        }
-        processedFacts.current.add(id);
-        void onWidgetAction({
-          type: "save",
-          factId: id,
-          factText: text.replace(/\s+/g, " ").trim(),
-        });
+      if (invocation.name === "show_map") {
+        console.log("show_map", invocation);
+        onShowMap(invocation);
         return { success: true };
       }
-
       return { success: false };
-    },
-    onResponseEnd: () => {
-      onResponseEnd();
-    },
-    onThreadChange: () => {
-      processedFacts.current.clear();
-    },
-    onError: ({ error }) => {
-      // ChatKit handles displaying the error to the user
-      console.error("ChatKit error", error);
-    },
+    }
   });
 
   return (
