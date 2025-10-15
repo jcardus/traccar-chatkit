@@ -25,6 +25,8 @@ from chatkit.types import (
     WorkflowItem,
 )
 
+from .traccar import get
+
 
 @dataclass
 class _ThreadState:
@@ -63,6 +65,7 @@ class SQLiteStore(Store[dict[str, Any]]):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS threads (
                     id TEXT PRIMARY KEY,
+                    user_id TEXT,
                     data TEXT NOT NULL,
                     created_at TIMESTAMP NOT NULL,
                     updated_at TIMESTAMP NOT NULL
@@ -86,9 +89,28 @@ class SQLiteStore(Store[dict[str, Any]]):
                 ON thread_items(thread_id, created_at)
             """)
 
+            # Index for user-based queries
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_threads_user_id
+                ON threads(user_id)
+            """)
+
             conn.commit()
         finally:
             conn.close()
+
+    def _get_user_email_from_traccar(self, context: dict[str, Any]) -> str | None:
+        """Get user email from Traccar session."""
+        try:
+            request = context.get("request")
+            if not request:
+                return None
+
+            session = get("api/session", request)
+            return session.get("email") if session else None
+        except Exception as e:
+            print(f"Failed to get user from Traccar: {e}")
+            return None
 
     def _load_thread_from_db(self, thread_id: str) -> _ThreadState | None:
         """Load a specific thread from database."""
@@ -152,7 +174,13 @@ class SQLiteStore(Store[dict[str, Any]]):
                 raise NotFoundError(f"Thread {thread_id} not found")
             # Cache it
             self._threads[thread_id] = state
-        return state.thread.model_copy(deep=True)
+
+        # Return a copy, ensuring items field is excluded
+        thread_copy = state.thread.model_copy(deep=True)
+        # Defensive: ensure no 'items' attribute exists
+        if hasattr(thread_copy, 'items'):
+            delattr(thread_copy, 'items')
+        return thread_copy
 
     async def save_thread(self, thread: ThreadMetadata, context: dict[str, Any]) -> None:
         state = self._threads.get(thread.id)
@@ -173,11 +201,12 @@ class SQLiteStore(Store[dict[str, Any]]):
             thread_json = json.dumps(thread_dict, default=str)
             created_at = thread.created_at or datetime.utcnow()
             updated_at = datetime.utcnow()
+            user_email = self._get_user_email_from_traccar(context)
 
             cursor.execute("""
-                INSERT OR REPLACE INTO threads (id, data, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
-            """, (thread.id, thread_json, created_at, updated_at))
+                INSERT OR REPLACE INTO threads (id, user_id, data, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (thread.id, user_email, thread_json, created_at, updated_at))
 
             conn.commit()
         finally:
@@ -190,11 +219,18 @@ class SQLiteStore(Store[dict[str, Any]]):
         order: str,
         context: dict[str, Any],
     ) -> Page[ThreadMetadata]:
-        # Load threads directly from database
+        # Get current user email
+        user_email = self._get_user_email_from_traccar(context)
+
+        # If no user session, return empty list (users without session don't persist threads)
+        if not user_email:
+            return Page(data=[], has_more=False, after=None)
+
+        # Load threads directly from database filtered by user
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, data FROM threads")
+            cursor.execute("SELECT id, data FROM threads WHERE user_id = ?", (user_email,))
 
             threads = []
             for thread_id, thread_json in cursor.fetchall():
