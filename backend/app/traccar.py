@@ -33,7 +33,9 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
         url += f"?{urlencode(params)}"
 
     print("TRACCAR: "  + url)
-    json = requests.get(url, headers=headers).json()
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()  # Raise an exception for bad status codes
+    json = response.json()
     # Print only first few items if response is a list
     if isinstance(json, list):
         print(f"Response: {len(json)} items, first 3: {json[:3]}")
