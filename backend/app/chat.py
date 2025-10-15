@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 from datetime import datetime
-from typing import Annotated, Any, AsyncIterator, Final, Literal
+from typing import Annotated, Any, AsyncIterator, Final
 from uuid import uuid4
 
 from agents import Agent, RunContextWrapper, Runner, function_tool
@@ -29,17 +29,9 @@ from openai.types.responses import ResponseInputContentParam
 from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
-from .facts import Fact, fact_store
+from .facts import Fact
 from .memory_store import MemoryStore
-from .sample_widget import render_weather_widget, weather_widget_copy_text
 from .traccar import get
-from .weather import (
-    WeatherLookupError,
-    retrieve_weather,
-)
-from .weather import (
-    normalize_unit as normalize_temperature_unit,
-)
 
 # If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)
@@ -120,7 +112,15 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
         self.store: MemoryStore = MemoryStore()
         super().__init__(self.store)
-        tools = [get_devices, get_positions, get_device_trips, get_session, get_device_positions]
+        tools = [
+            get_device_events,
+            get_device_positions,
+            get_device_stops,
+            get_device_summary,
+            get_device_trips,
+            get_devices,
+            get_positions,
+            get_session]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL,
             name="Traccar Assistant",
