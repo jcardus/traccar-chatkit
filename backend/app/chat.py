@@ -71,9 +71,10 @@ def _save_large_response(data: list[dict[str, Any]], report_type: str) -> str:
     # Write data to file
     with open(file_path, "w") as f:
         json.dump(data, f, indent=2, default=str)
-
+    url = f"http://chat.frotaweb.com:8000/chatkit/{filename}"
+    print("url", url)
     # Return URL path that will be served by the API
-    return f"/chatkit/{filename}"
+    return url
 
 
 def _is_tool_completion_item(item: Any) -> bool:
