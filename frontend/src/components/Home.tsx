@@ -34,8 +34,12 @@ export default function Home({
 
   return (
     <div className={containerClass}>
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col-reverse gap-10 px-6 pt-4 pb-10 md:py-10 lg:flex-row">
-        <div className="relative w-full flex h-[90vh] items-stretch overflow-hidden rounded-3xl bg-white/80 shadow-[0_45px_90px_-45px_rgba(15,23,42,0.6)] ring-1 ring-slate-200/60 backdrop-blur md:h-[90vh] dark:bg-slate-900/70 dark:shadow-[0_45px_90px_-45px_rgba(15,23,42,0.85)] dark:ring-slate-800/60">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col-reverse px-6 pt-4 pb-10 md:py-4 lg:flex-row">
+        <div className="
+        relative w-full flex h-[calc(100vh-32px)]
+        items-stretch overflow-hidden rounded-3xl
+        bg-white/80 shadow-[0_45px_90px_-45px_rgba(15,23,42,0.6)] ring-1 ring-slate-200/60 backdrop-blur
+         dark:bg-slate-900/70 dark:shadow-[0_45px_90px_-45px_rgba(15,23,42,0.85)] dark:ring-slate-800/60">
           <div className="absolute z-40 p-3">
             <ThemeToggle value={scheme} onChange={handleThemeChange}  />
           </div>
