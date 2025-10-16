@@ -23,7 +23,6 @@ export default function Home({
   );
 
   const onShowMap = (invocation: { params: { geojson: string; }; }) => {
-    console.log('onClientTool', invocation);
     if (invocation?.params?.geojson) {
         const geojsonData = typeof invocation.params.geojson === 'string'
           ? JSON.parse(invocation.params.geojson)
