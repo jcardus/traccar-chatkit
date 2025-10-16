@@ -145,7 +145,9 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_session,
             get_geofences,
             update_geofence,
-            create_geofence, show_map]
+            create_geofence,
+            show_map,
+            get_groups]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL,
             name="Traccar Assistant",
@@ -319,6 +321,10 @@ async def get_session(ctx: RunContextWrapper[TraccarAgentContext]) -> dict[str, 
 @function_tool(description_override="get last known position for all devices")
 async def get_positions(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/positions", ctx.context.request_context.get("request"))
+
+@function_tool(description_override="get groups")
+async def get_groups(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
+    return get("api/groups", ctx.context.request_context.get("request"))
 
 @function_tool(description_override="get device positions for a given date range")
 async def get_device_positions(
