@@ -6,8 +6,8 @@ import bbox from "@turf/bbox";
 export default function GeoJsonMapGL({ data }) {
     const mapRef = useRef(null);
     useEffect(() => {
-        if (!mapRef.current || !data) return;
-        setTimeout(() => {mapRef.current.fitBounds(bbox(data), { padding: 40, duration: 1000 })}, 1000)
+        if (!data) return;
+        setTimeout(() => {mapRef.current.fitBounds(bbox(data), { padding: 40, duration: 1000 })}, 2000)
     }, [data]);
 
     const layers = useMemo(() => {
