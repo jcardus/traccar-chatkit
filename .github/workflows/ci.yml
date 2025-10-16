@@ -15,9 +15,6 @@ jobs:
       matrix:
         project:
           - backend
-          - examples/customer-support/backend
-          - examples/knowledge-assistant/backend
-          - examples/marketing-assets/backend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
