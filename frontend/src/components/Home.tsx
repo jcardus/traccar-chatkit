@@ -33,7 +33,7 @@ export default function Home({
 
   return (
     <div className={containerClass}>
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col-reverse px-6 pt-4 pb-10 md:py-4 lg:flex-row">
+      <div className="mx-auto flex min-h-screen w-full max-w-12xl flex-col-reverse px-6 pt-4 pb-10 md:py-4 lg:flex-row">
         <div className="
         relative w-full flex h-[calc(100vh-32px)]
         items-stretch overflow-hidden rounded-3xl
