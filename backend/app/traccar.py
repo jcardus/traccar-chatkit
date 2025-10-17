@@ -9,7 +9,8 @@ def _get_traccar_url(request):
         "https://moviflotte.com",
         "https://localizalia.net",
         "https://web.fleetrack.cl",
-        "https://nogartel.fleetmap.io"
+        "https://nogartel.fleetmap.io",
+        "https://fleetmap.io"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "http://gps.fleetmap.pt"
