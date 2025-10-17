@@ -13,7 +13,7 @@ def _get_traccar_url(request):
         "https://fleetmap.io"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
-        return "http://gps.fleetmap.pt"
+        return "https://api.pinme.io"
     return "http://gps.frotaweb.com"
 
 def _format_date(value):
