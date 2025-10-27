@@ -10,7 +10,8 @@ def _get_traccar_url(request):
         "https://localizalia.net",
         "https://web.fleetrack.cl",
         "https://nogartel.fleetmap.io",
-        "https://fleetmap.io"
+        "https://fleetmap.io",
+        "https://plataforma.puntosat.cl"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "https://api.pinme.io"
