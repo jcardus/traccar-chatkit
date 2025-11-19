@@ -5,6 +5,7 @@ import { ChatKitPanel } from "./ChatKitPanel";
 import { ThemeToggle } from "./ThemeToggle";
 import { ColorScheme } from "../hooks/useColorScheme";
 import Map from "./Map";
+import HtmlRenderer from "./HtmlRenderer";
 
 export default function Home({
   scheme,
@@ -15,6 +16,7 @@ export default function Home({
 }) {
   const [mapData, setMapData] = useState(null );
   const [showMap, setShowMap] = useState(true);
+  const [htmlContent, setHtmlContent] = useState(null);
 
   const containerClass = clsx(
     "min-h-screen bg-gradient-to-br transition-colors duration-300",
@@ -22,6 +24,12 @@ export default function Home({
       ? "from-slate-900 via-slate-950 to-slate-850 text-slate-100"
       : "from-slate-100 via-white to-slate-200 text-slate-900"
   );
+
+  const onShowHtml = (invocation: { params: { html: string; }; }) => {
+    if (invocation?.params?.html) {
+      setHtmlContent(invocation?.params?.html);
+    }
+  }
 
   const onShowMap = (invocation: { params: { geojson: string; }; }) => {
     if (invocation?.params?.geojson) {
@@ -66,8 +74,14 @@ export default function Home({
           <ChatKitPanel
               theme={scheme}
               onShowMap={onShowMap}
+              onShowHtml={onShowHtml}
           />
           {showMap && <Map data={mapData}></Map>}
+          {htmlContent && (
+            <div className="w-full h-full p-4">
+              <HtmlRenderer html={htmlContent} />
+            </div>
+          )}
         </div>
       </div>
     </div>

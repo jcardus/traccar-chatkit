@@ -8,11 +8,13 @@ import type { ColorScheme } from "../hooks/useColorScheme";
 type ChatKitPanelProps = {
   theme: ColorScheme;
   onShowMap: (invocation) => void;
+  onShowHtml: (invocation) => void;
 };
 
 export function ChatKitPanel({
   theme,
   onShowMap,
+  onShowHtml
 }: ChatKitPanelProps) {
 
   const chatkit = useChatKit({
@@ -39,6 +41,9 @@ export function ChatKitPanel({
       if (invocation.name === "show_map") {
         console.log("show_map", invocation);
         onShowMap(invocation);
+        return { success: true };
+      } else if (invocation.name === "show_html") {
+        onShowHtml(invocation);
         return { success: true };
       }
       return { success: false };
