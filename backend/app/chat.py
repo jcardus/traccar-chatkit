@@ -141,6 +141,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_device_summary,
             get_device_trips,
             get_devices,
+            get_drivers,
             get_positions,
             get_session,
             get_geofences,
@@ -313,6 +314,10 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
 @function_tool(description_override="get devices")
 async def get_devices(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/devices", ctx.context.request_context.get("request"))
+
+@function_tool(description_override="get drivers")
+async def get_drivers(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
+    return get("api/drivers", ctx.context.request_context.get("request"))
 
 @function_tool(description_override="get current user session")
 async def get_session(ctx: RunContextWrapper[TraccarAgentContext]) -> dict[str, Any] | None:
