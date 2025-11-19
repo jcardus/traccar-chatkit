@@ -12,6 +12,7 @@ INSTRUCTIONS: Final[str] = (
 "Location history can be thousands of points and can exceed the api limits, try to use small date ranges or use trips."
 "Always use the browser timezone\n\n"
 "The chat interface supports rendering maps. When a user asks to show a map call the show_map tool with a Styled GeoJSON string."
+"The chat interface also supports rendering html. If you need to html call the show_html tool with the specified html."
 "Each feature must include a 'properties.style' field with one or more of these keys depending on geometry:\n"
 "- For Point: pointColor, pointRadius, icon (optional)\n"
 "- For LineString: lineColor, lineWidth, lineOpacity\n"

@@ -148,6 +148,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             update_geofence,
             create_geofence,
             show_map,
+            show_html,
             get_groups]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL,
@@ -418,5 +419,14 @@ async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) ->
     ctx.context.client_tool_call = ClientToolCall(
         name="show_map",
         arguments={"geojson": geojson},
+    )
+    return {"result": "success"}
+
+@function_tool(description_override="Display rendered html to the user")
+async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str] | None:
+    print("show_html")
+    ctx.context.client_tool_call = ClientToolCall(
+        name="show_map",
+        arguments={"html": html},
     )
     return {"result": "success"}
