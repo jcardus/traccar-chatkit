@@ -1,38 +1,31 @@
-import { useEffect, useRef } from "react";
+import { forwardRef } from "react";
 
 interface HtmlRendererProps {
   html: string | null;
   className?: string;
 }
 
-export default function HtmlRenderer({ html, className = "" }: HtmlRendererProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (containerRef.current && html) {
-      // Clear previous content
-      containerRef.current.innerHTML = "";
-
-      // Create a wrapper div for the HTML content
-      const wrapper = document.createElement("div");
-      wrapper.innerHTML = html;
-
-      containerRef.current.appendChild(wrapper);
+const HtmlRenderer = forwardRef<HTMLIFrameElement, HtmlRendererProps>(
+  ({ html, className = "" }, ref) => {
+    if (!html) {
+      return null;
     }
-  }, [html]);
 
-  if (!html) {
-    return null;
+    return (
+      <iframe
+        ref={ref}
+        srcDoc={html}
+        className={className}
+        style={{
+          height: "100%",
+          width: "100%",
+          border: "none",
+        }}
+      />
+    );
   }
+);
 
-  return (
-    <div
-      ref={containerRef}
-      className={`html-renderer overflow-auto ${className}`}
-      style={{
-        maxHeight: "100%",
-        width: "100%",
-      }}
-    />
-  );
-}
+HtmlRenderer.displayName = "HtmlRenderer";
+
+export default HtmlRenderer;

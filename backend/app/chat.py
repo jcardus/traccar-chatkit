@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO)
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
 REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
-MAX_ROWS_THRESHOLD: Final[int] = 200
+MAX_ROWS_THRESHOLD: Final[int] = 100
 
 
 def _normalize_color_scheme(value: str) -> str:
@@ -332,7 +332,7 @@ async def get_positions(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dic
 async def get_groups(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/groups", ctx.context.request_context.get("request"))
 
-@function_tool(description_override="get device positions for a given date range")
+@function_tool(description_override="get device positions for a given date range. If the result is too large, a string with TOO_MANY_POINTS is returned.")
 async def get_device_positions(
     ctx: RunContextWrapper[TraccarAgentContext],
         device_id: int,
@@ -344,9 +344,9 @@ async def get_device_positions(
     if resp and isinstance(resp, list):
         cleaned_data = [{k: v for k, v in pos.items() if k != 'raw'} for pos in resp]
         if len(cleaned_data) > MAX_ROWS_THRESHOLD:
-            file_url = _save_large_response(cleaned_data, "positions")
-            print("file_url", file_url)
-            return file_url
+            #file_url = _save_large_response(cleaned_data, "positions")
+            #print("file_url", file_url)
+            return 'TOO_MANY_POINTS'
         return cleaned_data
     return resp
 
@@ -426,7 +426,7 @@ async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) ->
 async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str] | None:
     print("show_html")
     ctx.context.client_tool_call = ClientToolCall(
-        name="show_map",
+        name="show_html",
         arguments={"html": html},
     )
     return {"result": "success"}
