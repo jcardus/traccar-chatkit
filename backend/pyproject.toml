@@ -3,7 +3,7 @@ name = "chatkit-backend"
 version = "0.1.0"
 description = "FastAPI backend service for ChatKit boilerplate"
 readme = "README.md"
-requires-python = "==3.13"
+requires-python = "==3.13.*"
 dependencies = [
     "fastapi>=0.114.1,<0.116",
     "httpx>=0.28,<0.29",
