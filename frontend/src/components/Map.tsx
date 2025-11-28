@@ -1,4 +1,4 @@
-import { Map, Source, Layer } from "react-map-gl/maplibre";
+import { Map, Source, Layer, NavigationControl } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {useEffect, useMemo, useRef} from "react";
 import bbox from "@turf/bbox";
@@ -121,8 +121,9 @@ export default function GeoJsonMapGL({ data }) {
             ref={mapRef}
             initialViewState={{ longitude: 0, latitude: 0, zoom: 2 }}
             style={{ width: "100%", height: "100%" }}
-            mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+            mapStyle="https://mapbox.traccar-5b9.workers.dev?style=mapbox://styles/mapbox/streets-v12&token=pk.eyJ1IjoiZ3VzdGF2by1mbGVldG1hcCIsImEiOiJjbWQ4bTUwZ2EwMXkyMmpzOGI0c25reGFpIn0.ftht2eo6PRXkAEWy9oQ65g"
         >
+            <NavigationControl />
             <Source id="geojson" type="geojson" data={data}>
                 {layers.map((layer) => (
                     // @ts-ignore
