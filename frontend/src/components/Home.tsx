@@ -16,6 +16,7 @@ export default function Home({
 }) {
   const [mapData, setMapData] = useState(null );
   const [showMap, setShowMap] = useState(true);
+  const [showHtml, setShowHtml] = useState(true);
   const [htmlContent, setHtmlContent] = useState(null);
 
   const containerClass = clsx(
@@ -27,7 +28,9 @@ export default function Home({
 
   const onShowHtml = (invocation: { params: { html: string; }; }) => {
     if (invocation?.params?.html) {
-      setHtmlContent(invocation?.params?.html);
+        setShowMap(false);
+        setShowHtml(true);
+        setHtmlContent(invocation?.params?.html);
     }
   }
 
@@ -37,12 +40,14 @@ export default function Home({
           ? JSON.parse(invocation.params.geojson)
           : invocation.params.geojson;
         setMapData(geojsonData);
+        setShowMap(true);
+        setShowHtml(false);
     }
   }
 
   return (
     <div className={containerClass}>
-      <div className="mx-auto flex min-h-screen w-full max-w-12xl flex-col-reverse px-6 pt-4 pb-10 md:py-4 lg:flex-row">
+      <div className="mx-auto flex min-h-screen w-full max-w-12xl flex-col-reverse px-4 pt-4 pb-10 md:py-4 lg:flex-row">
         <div className="
         relative w-full flex h-[calc(100vh-32px)]
         items-stretch overflow-hidden rounded-3xl
@@ -77,9 +82,9 @@ export default function Home({
               onShowHtml={onShowHtml}
           />
           {showMap && <Map data={mapData}></Map>}
-          {htmlContent && (
-            <div className="w-full h-full p-4">
-              <HtmlRenderer html={htmlContent} />
+          {showHtml && htmlContent && (
+            <div className="w-full h-full p-0 m-0 bg-white">
+              <HtmlRenderer  html={htmlContent} />
             </div>
           )}
         </div>

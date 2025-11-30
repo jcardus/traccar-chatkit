@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO)
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
 REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
-MAX_ROWS_THRESHOLD: Final[int] = 200
+
 
 
 def _normalize_color_scheme(value: str) -> str:
@@ -136,7 +136,6 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         super().__init__(self.store)
         tools = [
             get_device_events,
-            get_device_positions,
             get_device_stops,
             get_device_summary,
             get_device_trips,
@@ -332,25 +331,6 @@ async def get_positions(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dic
 async def get_groups(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/groups", ctx.context.request_context.get("request"))
 
-@function_tool(description_override="get device positions for a given date range")
-async def get_device_positions(
-    ctx: RunContextWrapper[TraccarAgentContext],
-        device_id: int,
-        from_date: datetime,
-        to_date: datetime
-) -> str | list[dict[Any, Any]] | Any:
-    resp = get("api/reports/route", ctx.context.request_context.get("request"), device_id, from_date, to_date)
-    # Remove 'raw' field from each position to reduce data size
-    if resp and isinstance(resp, list):
-        cleaned_data = [{k: v for k, v in pos.items() if k != 'raw'} for pos in resp]
-        if len(cleaned_data) > MAX_ROWS_THRESHOLD:
-            file_url = _save_large_response(cleaned_data, "positions")
-            print("file_url", file_url)
-            return file_url
-        return cleaned_data
-    return resp
-
-
 @function_tool(description_override="get device events for a given date range")
 async def get_device_events(
         ctx: RunContextWrapper[TraccarAgentContext],
@@ -426,7 +406,7 @@ async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) ->
 async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str] | None:
     print("show_html")
     ctx.context.client_tool_call = ClientToolCall(
-        name="show_map",
+        name="show_html",
         arguments={"html": html},
     )
     return {"result": "success"}

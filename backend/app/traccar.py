@@ -14,7 +14,7 @@ def _get_traccar_url(request):
         "https://plataforma.puntosat.cl"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
-        return "https://api.pinme.io"
+        return "https://traccar-eu.joaquim.workers.dev"
     return "http://gps.frotaweb.com"
 
 def _format_date(value):
