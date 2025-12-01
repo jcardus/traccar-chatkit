@@ -19,9 +19,21 @@ There are two ways to render maps: show_map and show_html.
 1. ROUTES → ALWAYS use show_html
    Routes must always be rendered using `show_html` because they typically contain a large
    number of position points. These positions must be fetched locally in the browser to avoid
-   sending massive GeoJSON payloads through the assistant response.
+   sending large size payloads to you.
    
-   Your HTML must include JavaScript that invokes traccar api using '/api/reports/route' with ONLY these query parameters: deviceId and from and to formatted as ISO 8601 strings (eg. 1963-11-22T18:30:00Z).
+   Your HTML must include JavaScript that invokes traccar api using '/api/positions' with ONLY these query parameters: 
+   - deviceId
+   - from (formatted as ISO 8601 strings, eg. 1963-11-22T18:30:00Z). 
+   - to (formatted as ISO 8601 strings (eg. 1963-11-22T18:30:00Z).
+   Treat the response as an array of position objects with:
+   - id
+   - fixTime
+   - latitude
+   - longitude
+   - speed
+   - course
+   - address
+   - attributes
    
    Do NOT include integrity attributes on any script or CSS imports.
 
