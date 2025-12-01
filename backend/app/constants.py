@@ -36,6 +36,7 @@ There are two ways to render maps: show_map and show_html.
    - attributes
    
    Do NOT include integrity attributes on any script or CSS imports.
+   I you want to use mapbox you can use this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
 
 2. EVERYTHING ELSE → use show_map
    For all other map requests (e.g., showing device locations, geofences, shapes, single paths),
