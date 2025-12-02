@@ -11,7 +11,8 @@ def _get_traccar_url(request):
         "https://web.fleetrack.cl",
         "https://nogartel.fleetmap.io",
         "https://fleetmap.io",
-        "https://plataforma.puntosat.cl"
+        "https://plataforma.puntosat.cl",
+        "https://afconsultingsystems.com"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "https://traccar-eu.joaquim.workers.dev"

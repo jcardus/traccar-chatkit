@@ -31,7 +31,7 @@ from openai.types.responses import ResponseInputContentParam
 from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
-from .memory_store import SQLiteStore
+from .sqlite_store import SQLiteStore
 from .traccar import get, put, post
 
 # If you want to check what's going on under the hood, set this to DEBUG
