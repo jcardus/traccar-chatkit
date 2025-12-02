@@ -105,22 +105,6 @@ class TraccarAgentContext(AgentContext):
     store: Annotated[SQLiteStore, Field(exclude=True)]
     request_context: dict[str, Any]
 
-
-async def _stream_saved_hidden(ctx: RunContextWrapper[TraccarAgentContext], fact: Fact) -> None:
-    await ctx.context.stream(
-        ThreadItemDoneEvent(
-            item=HiddenContextItem(
-                id=_gen_id("msg"),
-                thread_id=ctx.context.thread.id,
-                created_at=datetime.now(),
-                content=(
-                    f'<FACT_SAVED id="{fact.id}" threadId="{ctx.context.thread.id}">{fact.text}</FACT_SAVED>'
-                ),
-            ),
-        )
-    )
-
-
 def _user_message_text(item: UserMessageItem) -> str:
     parts: list[str] = []
     for part in item.content:
