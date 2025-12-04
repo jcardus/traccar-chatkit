@@ -7,8 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-from pydantic import TypeAdapter
-
 from chatkit.store import NotFoundError, Store
 from chatkit.types import (
     AssistantMessageItem,
@@ -24,6 +22,7 @@ from chatkit.types import (
     WidgetItem,
     WorkflowItem,
 )
+from pydantic import TypeAdapter
 
 from .traccar import get
 

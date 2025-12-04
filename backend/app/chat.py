@@ -370,7 +370,7 @@ async def create_geofence(
         name: str,
         description: str | None = None
 ) -> list[dict[str, Any]] | None:
-    return post(f"api/geofences", ctx.context.request_context.get("request"), area=area, name=name, description=description)
+    return post("api/geofences", ctx.context.request_context.get("request"), area=area, name=name, description=description)
 
 @function_tool(description_override="Show a map with the provided Styled GeoJSON.\n\ngeojson argument should be a valid styled geojson string.")
 async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) -> dict[str, str] | None:
