@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator, Final
+from typing import Annotated, Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
 from agents import Agent, RunContextWrapper, Runner, function_tool
@@ -133,7 +133,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_groups,
         ]
         self.assistant = Agent[TraccarAgentContext](
-            model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=tools
+            model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=cast(Any, tools)
         )
         self._thread_item_converter = self._init_thread_item_converter()
 
@@ -149,7 +149,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             request_context=context,
         )
 
-        target_item = item
+        target_item: ThreadItem | None = item
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 

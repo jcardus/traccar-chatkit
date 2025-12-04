@@ -145,7 +145,18 @@ class SQLiteStore(Store[dict[str, Any]]):
         """Deserialize a thread item from JSON data using Pydantic's discriminated union."""
         # Use TypeAdapter with a Union of all ThreadItem types
         # Pydantic will automatically use the 'type' discriminator field
-        adapter = TypeAdapter(
+        adapter: TypeAdapter[
+            Union[
+                UserMessageItem,
+                AssistantMessageItem,
+                ClientToolCallItem,
+                HiddenContextItem,
+                EndOfTurnItem,
+                TaskItem,
+                WidgetItem,
+                WorkflowItem,
+            ]
+        ] = TypeAdapter(
             Union[
                 UserMessageItem,
                 AssistantMessageItem,
