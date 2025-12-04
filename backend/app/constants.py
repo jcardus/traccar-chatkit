@@ -55,7 +55,8 @@ Your JavaScript will run inside the platform domain, so any request to /api
 will automatically be proxied to the backend server.
 
 Use the `get_openapi_yaml` tool to retrieve the backend API specification,
-and use it to generate correct JavaScript requests.
+and use it to generate correct JavaScript requests. Always include the 
+"Accept" header in your requests.
 
 Always include an option for downloading the report as a PDF, and account for this
 when rendering the HTML.
