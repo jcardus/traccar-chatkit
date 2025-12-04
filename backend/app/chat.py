@@ -19,7 +19,6 @@ from chatkit.agents import (
 )
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
 from chatkit.types import (
-    Attachment,
     ClientToolCallItem,
     HiddenContextItem,
     ThreadItem,
