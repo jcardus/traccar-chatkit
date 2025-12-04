@@ -30,7 +30,7 @@ There are two ways to render maps: show_map and show_html.
    - fixTime
    - latitude
    - longitude
-   - speed
+   - speed (in knots)
    - course
    - address
    - attributes

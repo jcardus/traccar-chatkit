@@ -151,7 +151,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             request_context=context,
         )
 
-        target_item: ThreadItem | None = item
+        target_item = item
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 
@@ -322,7 +322,7 @@ async def get_device_events(
 ) -> list[dict[str, Any]] | None:
     return get("api/reports/events", ctx.context.request_context.get("request"), device_id, from_date, to_date)
 
-@function_tool(description_override="get device summary data (maximum speed, average speed, distance travelled, spent fuel and engine hours) for a given date range")
+@function_tool(description_override="get device summary data (maximum speed, average speed, distance travelled, spent fuel and engine hours) for a given date range. Speeds are in knots.")
 async def get_device_summary(
         ctx: RunContextWrapper[TraccarAgentContext],
         device_id: int,
