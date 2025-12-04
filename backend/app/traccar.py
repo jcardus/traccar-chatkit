@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 
 import requests
 
+
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
     print(f"Request origin: {origin}")
