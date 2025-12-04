@@ -41,7 +41,6 @@ CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
 REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
 
 
-
 def _normalize_color_scheme(value: str) -> str:
     normalized = str(value).strip().lower()
     if normalized in SUPPORTED_COLOR_SCHEMES:
@@ -74,6 +73,7 @@ def _save_html(html: str, thread_id: str) -> None:
     url = f"http://chat.frotaweb.com:8000/chatkit/{filename}"
     print("html url", url)
 
+
 def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
 
@@ -102,6 +102,7 @@ class TraccarAgentContext(AgentContext):
     store: Annotated[SQLiteStore, Field(exclude=True)]
     request_context: dict[str, Any]
 
+
 def _user_message_text(item: UserMessageItem) -> str:
     parts: list[str] = []
     for part in item.content:
@@ -129,12 +130,10 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             create_geofence,
             show_html,
             get_openapi_yaml,
-            get_groups]
+            get_groups,
+        ]
         self.assistant = Agent[TraccarAgentContext](
-            model=MODEL,
-            name="Traccar Assistant",
-            instructions=INSTRUCTIONS,
-            tools=tools
+            model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=tools
         )
         self._thread_item_converter = self._init_thread_item_converter()
 
@@ -296,84 +295,144 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
 async def get_devices(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/devices", ctx.context.request_context.get("request"))
 
+
 @function_tool(description_override="get drivers")
 async def get_drivers(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/drivers", ctx.context.request_context.get("request"))
+
 
 @function_tool(description_override="get current user session")
 async def get_session(ctx: RunContextWrapper[TraccarAgentContext]) -> dict[str, Any] | None:
     return get("api/session", ctx.context.request_context.get("request"))
 
+
 @function_tool(description_override="get last known position for all devices")
 async def get_positions(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/positions", ctx.context.request_context.get("request"))
+
 
 @function_tool(description_override="get groups")
 async def get_groups(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/groups", ctx.context.request_context.get("request"))
 
+
 @function_tool(description_override="get device events for a given date range")
 async def get_device_events(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        device_id: int,
-        from_date: datetime,
-        to_date: datetime
+    ctx: RunContextWrapper[TraccarAgentContext],
+    device_id: int,
+    from_date: datetime,
+    to_date: datetime,
 ) -> list[dict[str, Any]] | None:
-    return get("api/reports/events", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+    return get(
+        "api/reports/events",
+        ctx.context.request_context.get("request"),
+        device_id,
+        from_date,
+        to_date,
+    )
 
-@function_tool(description_override="get device summary data (maximum speed, average speed, distance travelled, spent fuel and engine hours) for a given date range. Speeds are in knots.")
+
+@function_tool(
+    description_override="get device summary data (maximum speed, average speed, distance travelled, spent fuel and engine hours) for a given date range. Speeds are in knots."
+)
 async def get_device_summary(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        device_id: int,
-        from_date: datetime,
-        to_date: datetime
+    ctx: RunContextWrapper[TraccarAgentContext],
+    device_id: int,
+    from_date: datetime,
+    to_date: datetime,
 ) -> list[dict[str, Any]] | None:
-    return get("api/reports/summary", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+    return get(
+        "api/reports/summary",
+        ctx.context.request_context.get("request"),
+        device_id,
+        from_date,
+        to_date,
+    )
 
 
-@function_tool(description_override="get device trips for a given date range. 'from_date' and 'to_date' should include timezone")
+@function_tool(
+    description_override="get device trips for a given date range. 'from_date' and 'to_date' should include timezone"
+)
 async def get_device_trips(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        device_id: int,
-        from_date: datetime,
-        to_date: datetime
+    ctx: RunContextWrapper[TraccarAgentContext],
+    device_id: int,
+    from_date: datetime,
+    to_date: datetime,
 ) -> list[dict[str, Any]] | None:
-    return get("api/reports/trips", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+    return get(
+        "api/reports/trips",
+        ctx.context.request_context.get("request"),
+        device_id,
+        from_date,
+        to_date,
+    )
+
 
 @function_tool(description_override="get device stops for a given date range")
 async def get_device_stops(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        device_id: int,
-        from_date: datetime,
-        to_date: datetime
+    ctx: RunContextWrapper[TraccarAgentContext],
+    device_id: int,
+    from_date: datetime,
+    to_date: datetime,
 ) -> list[dict[str, Any]] | None:
-    return get("api/reports/stops", ctx.context.request_context.get("request"), device_id, from_date, to_date)
+    return get(
+        "api/reports/stops",
+        ctx.context.request_context.get("request"),
+        device_id,
+        from_date,
+        to_date,
+    )
+
 
 @function_tool(description_override="get geofences")
 async def get_geofences(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
     return get("api/geofences", ctx.context.request_context.get("request"))
 
-@function_tool(description_override="update a geofence, area is a wkt string, coordinate order is lat,lon")
+
+@function_tool(
+    description_override="update a geofence, area is a wkt string, coordinate order is lat,lon"
+)
 async def update_geofence(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        geofence_id: int,
-        area: str,
-        name: str,
-        description: str | None = None
+    ctx: RunContextWrapper[TraccarAgentContext],
+    geofence_id: int,
+    area: str,
+    name: str,
+    description: str | None = None,
 ) -> list[dict[str, Any]] | None:
-    return put(f"api/geofences/{geofence_id}", ctx.context.request_context.get("request"), id=geofence_id, area=area, name=name, description=description)
+    return put(
+        f"api/geofences/{geofence_id}",
+        ctx.context.request_context.get("request"),
+        id=geofence_id,
+        area=area,
+        name=name,
+        description=description,
+    )
 
-@function_tool(description_override="create a geofence, area is a wkt string, coordinate order is lat,lon")
+
+@function_tool(
+    description_override="create a geofence, area is a wkt string, coordinate order is lat,lon"
+)
 async def create_geofence(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        area: str,
-        name: str,
-        description: str | None = None
+    ctx: RunContextWrapper[TraccarAgentContext],
+    area: str,
+    name: str,
+    description: str | None = None,
 ) -> list[dict[str, Any]] | None:
-    return post("api/geofences", ctx.context.request_context.get("request"), area=area, name=name, description=description)
+    return post(
+        "api/geofences",
+        ctx.context.request_context.get("request"),
+        area=area,
+        name=name,
+        description=description,
+    )
 
-@function_tool(description_override="Show a map with the provided Styled GeoJSON.\n\ngeojson argument should be a valid styled geojson string.")
-async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) -> dict[str, str] | None:
+
+@function_tool(
+    description_override="Show a map with the provided Styled GeoJSON.\n\ngeojson argument should be a valid styled geojson string."
+)
+async def show_map(
+    ctx: RunContextWrapper[TraccarAgentContext], geojson: str
+) -> dict[str, str] | None:
     print("show_map")
     # Validate GeoJSON
     json.loads(geojson)
@@ -383,8 +442,11 @@ async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) ->
     )
     return {"result": "success"}
 
+
 @function_tool(description_override="Display rendered html to the user")
-async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str] | None:
+async def show_html(
+    ctx: RunContextWrapper[TraccarAgentContext], html: str
+) -> dict[str, str] | None:
     print("show_html")
     _save_html(html, ctx.context.thread.id)
     ctx.context.client_tool_call = ClientToolCall(
@@ -392,6 +454,7 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
         arguments={"html": html},
     )
     return {"result": "success"}
+
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
 async def get_openapi_yaml() -> str:
@@ -2829,4 +2892,3 @@ components:
             $ref: '#/components/schemas/Maintenance'
       required: true
     """
-

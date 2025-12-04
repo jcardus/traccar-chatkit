@@ -29,5 +29,4 @@ and use it to generate correct JavaScript requests. Always include the
 """
 
 
-
 MODEL = "gpt-5-mini"

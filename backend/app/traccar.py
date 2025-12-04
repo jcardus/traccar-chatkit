@@ -14,19 +14,21 @@ def _get_traccar_url(request):
         "https://nogartel.fleetmap.io",
         "https://fleetmap.io",
         "https://plataforma.puntosat.cl",
-        "https://afconsultingsystems.com"
+        "https://afconsultingsystems.com",
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "https://traccar-eu.joaquim.workers.dev"
     return "http://gps.frotaweb.com"
+
 
 def _format_date(value):
     """Convert datetime objects to UTC and format as ISO 8601 with Z suffix"""
     if isinstance(value, datetime):
         # Convert to UTC if timezone-aware, otherwise assume it's already UTC
         utc_value = value.astimezone(timezone.utc) if value.tzinfo else value
-        return utc_value.strftime('%Y-%m-%dT%H:%M:%SZ')
+        return utc_value.strftime("%Y-%m-%dT%H:%M:%SZ")
     return value
+
 
 def get(path, request, device_id=None, from_date=None, to_date=None):
     cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
@@ -46,7 +48,7 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
     if params:
         url += f"?{urlencode(params)}"
 
-    print("TRACCAR: "  + url)
+    print("TRACCAR: " + url)
     response = requests.get(url, headers=headers)
     response.raise_for_status()  # Raise an exception for bad status codes
     json = response.json()
@@ -57,7 +59,10 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
         print(json)
     return json
 
-def _make_request_with_body(method, path, request, _id=None, name=None, description=None, area=None):
+
+def _make_request_with_body(
+    method, path, request, _id=None, name=None, description=None, area=None
+):
     """Common function for PUT and POST requests with JSON body."""
     cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
     headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
@@ -92,8 +97,10 @@ def _make_request_with_body(method, path, request, _id=None, name=None, descript
 
     return json_response
 
+
 def put(path, request, id=None, name=None, description=None, area=None):
     return _make_request_with_body("PUT", path, request, id, name, description, area)
+
 
 def post(path, request, name=None, description=None, area=None):
     return _make_request_with_body("POST", path, request, None, name, description, area)

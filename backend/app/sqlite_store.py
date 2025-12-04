@@ -122,13 +122,13 @@ class SQLiteStore(Store[dict[str, Any]]):
 
             thread_data = json.loads(row[0])
             # Remove 'items' field if present (for backwards compatibility with old data)
-            thread_data.pop('items', None)
+            thread_data.pop("items", None)
             thread = ThreadMetadata.model_validate(thread_data)
 
             # Load items for this thread
             cursor.execute(
                 "SELECT data FROM thread_items WHERE thread_id = ? ORDER BY created_at",
-                (thread_id,)
+                (thread_id,),
             )
             items = []
             for (item_json,) in cursor.fetchall():
@@ -173,16 +173,19 @@ class SQLiteStore(Store[dict[str, Any]]):
         try:
             cursor = conn.cursor()
             # Exclude 'items' field when saving to ensure we only save ThreadMetadata
-            thread_dict = thread.model_dump(exclude={'items'})
+            thread_dict = thread.model_dump(exclude={"items"})
             thread_json = json.dumps(thread_dict, default=str)
             created_at = thread.created_at or datetime.utcnow()
             updated_at = datetime.utcnow()
             user_email = self._get_user_email_from_traccar(context)
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO threads (id, user_id, data, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?)
-            """, (thread.id, user_email, thread_json, created_at, updated_at))
+            """,
+                (thread.id, user_email, thread_json, created_at, updated_at),
+            )
 
             conn.commit()
         finally:
@@ -212,7 +215,7 @@ class SQLiteStore(Store[dict[str, Any]]):
             for thread_id, thread_json in cursor.fetchall():
                 thread_data = json.loads(thread_json)
                 # Remove 'items' field if present (for backwards compatibility)
-                thread_data.pop('items', None)
+                thread_data.pop("items", None)
                 thread = ThreadMetadata.model_validate(thread_data)
                 threads.append(thread)
         finally:
@@ -260,7 +263,7 @@ class SQLiteStore(Store[dict[str, Any]]):
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT data FROM thread_items WHERE thread_id = ? ORDER BY created_at",
-                (thread_id,)
+                (thread_id,),
             )
             items = []
             for (item_json,) in cursor.fetchall():
@@ -307,10 +310,13 @@ class SQLiteStore(Store[dict[str, Any]]):
             item_json = item.model_dump_json()
             created_at = getattr(item, "created_at", datetime.utcnow())
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO thread_items (id, thread_id, data, created_at)
                 VALUES (?, ?, ?, ?)
-            """, (item.id, thread_id, item_json, created_at))
+            """,
+                (item.id, thread_id, item_json, created_at),
+            )
 
             conn.commit()
         finally:
@@ -324,10 +330,13 @@ class SQLiteStore(Store[dict[str, Any]]):
             item_json = item.model_dump_json()
             created_at = getattr(item, "created_at", datetime.utcnow())
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO thread_items (id, thread_id, data, created_at)
                 VALUES (?, ?, ?, ?)
-            """, (item.id, thread_id, item_json, created_at))
+            """,
+                (item.id, thread_id, item_json, created_at),
+            )
 
             conn.commit()
         finally:
