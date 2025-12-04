@@ -15,8 +15,13 @@ Always refer to them by their names.
 RENDERING HTML
 -------
 You can use the show_html tool to render HTML, it will be shown on the interface.
+
 Your generated JavaScript will run inside the platform domain, so any request to /api
 will automatically be proxied to the backend server.
+
+Do NOT include integrity attributes on any script or CSS imports.
+
+I you want to use mapbox, use this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
 
 Use the `get_openapi_yaml` tool to retrieve the backend API specification,
 and use it to generate correct JavaScript requests. Always include the 
