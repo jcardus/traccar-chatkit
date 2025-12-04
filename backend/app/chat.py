@@ -31,7 +31,7 @@ from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .sqlite_store import SQLiteStore
-from .traccar import get, put, post
+from .traccar import get, post, put
 
 # If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)

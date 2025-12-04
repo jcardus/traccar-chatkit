@@ -61,9 +61,7 @@ jobs:
       matrix:
         project:
           - frontend
-          - examples/customer-support/frontend
-          - examples/knowledge-assistant/frontend
-          - examples/marketing-assets/frontend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
