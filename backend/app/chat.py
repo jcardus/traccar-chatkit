@@ -127,7 +127,6 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_geofences,
             update_geofence,
             create_geofence,
-            show_map,
             show_html,
             get_openapi_yaml,
             get_groups]
