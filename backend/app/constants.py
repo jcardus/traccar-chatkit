@@ -30,13 +30,13 @@ There are two ways to render maps: show_map and show_html.
    - fixTime
    - latitude
    - longitude
-   - speed (in knots)
+   - speed (knots)
    - course
    - address
    - attributes
    
    Do NOT include integrity attributes on any script or CSS imports.
-   I you want to use mapbox you can use this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
+   I you want to use mapbox, use this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
 
 2. EVERYTHING ELSE → use show_map
    For all other map requests (e.g., showing device locations, geofences, shapes, single paths),
@@ -49,9 +49,18 @@ There are two ways to render maps: show_map and show_html.
      
 REPORTS
 -------
+When the user asks for reports, always use `show_html`.
 
-When the user asks for reports, use show_html. Always include an option to download the report as PDF, take that in consideration when rendering the HTML.
+Your JavaScript will run inside the platform domain, so any request to /api
+will automatically be proxied to the backend server.
+
+Use the `get_openapi_yaml` tool to retrieve the backend API specification,
+and use it to generate correct JavaScript requests.
+
+Always include an option for downloading the report as a PDF, and account for this
+when rendering the HTML.
 """
+
 
 
 MODEL = "gpt-5-mini"
