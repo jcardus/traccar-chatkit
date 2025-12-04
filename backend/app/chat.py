@@ -58,24 +58,22 @@ def _gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:8]}"
 
 
-def _save_large_response(data: list[dict[str, Any]], report_type: str) -> str:
-    """Save large response to a file and return the file URL."""
+def _save_html(html: str, thread_id: str) -> None:
+    """Save HTML to a file and return the file URL."""
     # Ensure reports directory exists
     REPORTS_DIR.mkdir(exist_ok=True)
 
-    # Generate unique filename
+    # Generate unique filename with thread_id
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{report_type}_{timestamp}_{uuid4().hex[:8]}.json"
+    filename = f"html_{thread_id}_{timestamp}_{uuid4().hex[:8]}.html"
     file_path = REPORTS_DIR / filename
 
-    # Write data to file
-    with open(file_path, "w") as f:
-        json.dump(data, f, indent=2, default=str)
-    url = f"http://chat.frotaweb.com:8000/chatkit/{filename}"
-    print("url", url)
-    # Return URL path that will be served by the API
-    return url
+    # Write HTML to file
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(html)
 
+    url = f"http://chat.frotaweb.com:8000/chatkit/{filename}"
+    print("html url", url)
 
 def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
@@ -389,6 +387,7 @@ async def show_map(ctx: RunContextWrapper[TraccarAgentContext], geojson: str) ->
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str] | None:
     print("show_html")
+    _save_html(html, ctx.context.thread.id)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
