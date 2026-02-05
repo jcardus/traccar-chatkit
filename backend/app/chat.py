@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import inspect
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
+import boto3
 from agents import Agent, RunContextWrapper, Runner, function_tool
 from chatkit.agents import (
     AgentContext,
@@ -427,22 +427,6 @@ async def create_geofence(
     )
 
 
-@function_tool(
-    description_override="Show a map with the provided Styled GeoJSON.\n\ngeojson argument should be a valid styled geojson string."
-)
-async def show_map(
-    ctx: RunContextWrapper[TraccarAgentContext], geojson: str
-) -> dict[str, str] | None:
-    print("show_map")
-    # Validate GeoJSON
-    json.loads(geojson)
-    ctx.context.client_tool_call = ClientToolCall(
-        name="show_map",
-        arguments={"geojson": geojson},
-    )
-    return {"result": "success"}
-
-
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
@@ -455,6 +439,31 @@ async def show_html(
     )
     return {"result": "success"}
 
+@function_tool(description_override="Forward the user question to a real agent.")
+async def forward_to_real_agent(
+    ctx: RunContextWrapper[TraccarAgentContext], question: str
+) -> str:
+    print("forward_to_real_agent")
+    """Send the user's question to support via email."""
+    request = ctx.context.request_context.get("request")
+    session = get("api/session", request) if request else None
+    user_email = session.get("email") if session else "unknown"
+    thread_id = ctx.context.thread.id
+
+    ses = boto3.client("ses", region_name="eu-west-1")
+    ses.send_email(
+        Source="support@fleetmap.io",
+        Destination={"ToAddresses": ["support@fleetmap.io"]},
+        Message={
+            "Subject": {"Data": f"Support request from {user_email}"},
+            "Body": {
+                "Text": {
+                    "Data": f"User: {user_email}\nThread: {thread_id}\n\nQuestion:\n{question}"
+                }
+            },
+        },
+    )
+    return "Your question has been forwarded to our support team. They will get back to you soon."
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
 async def get_openapi_yaml() -> str:
