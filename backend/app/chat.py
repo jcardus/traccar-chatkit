@@ -2220,11 +2220,14 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique position record identifier
         deviceId:
           type: integer
           format: int64
+          description: Identifier of the device that reported this position
         protocol:
           type: string
+          description: Device protocol name that produced the message
         deviceTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
@@ -2239,30 +2242,40 @@ components:
           format: date-time
         valid:
           type: boolean
+          description: Indicates whether the position was marked as valid by the device
         latitude:
           type: number
+          description: Latitude in decimal degrees
         longitude:
           type: number
+          description: Longitude in decimal degrees
         altitude:
           type: number
+          description: Altitude above sea level in meters
         speed:
           type: number
           description: in knots
         course:
           type: number
+          description: Heading in degrees (0-360) where 0 is true north
         address:
           type: string
+          description: Resolved reverse-geocoded address if available
         accuracy:
           type: number
+          description: Estimated positional accuracy in meters when provided
         network:
           type: object
+          description: Network metadata (e.g. cell or Wi-Fi data) supplied by the device
           properties: {}
         geofenceIds:
           type: array
           items:
             type: integer
+          description: List of geofence ids applicable to this position
         attributes:
           type: object
+          description: Custom key-value attributes sent by the device or enrichments
           properties: {}
     User:
       type: object
@@ -2270,33 +2283,46 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique user identifier
         name:
           type: string
+          description: User display name
         email:
           type: string
+          description: Email address used for login and notifications
         phone:
           type: string
           nullable: true
+          description: Contact phone number for alerts
         readonly:
           type: boolean
+          description: When true, the user cannot change settings
         administrator:
           type: boolean
+          description: Grants full administrative privileges when enabled
         map:
           type: string
           nullable: true
+          description: Preferred default map layer for the user
         latitude:
           type: number
+          description: Default map center latitude for this user
         longitude:
           type: number
+          description: Default map center longitude for this user
         zoom:
           type: integer
+          description: Default map zoom level on login
         password:
           type: string
+          description: Password for user authentication
         coordinateFormat:
           type: string
           nullable: true
+          description: Preferred coordinate display format
         disabled:
           type: boolean
+          description: Indicates whether the user account is disabled
         expirationTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
@@ -2304,19 +2330,26 @@ components:
           nullable: true
         deviceLimit:
           type: integer
+          description: Maximum number of devices the user can manage
         userLimit:
           type: integer
+          description: Maximum number of subordinate users
         deviceReadonly:
           type: boolean
+          description: Restricts user from modifying device attributes
         limitCommands:
           type: boolean
+          description: Prevents user from sending unsupported commands
         fixedEmail:
           type: boolean
+          description: Locks the email field to avoid changes
         poiLayer:
           type: string
           nullable: true
+          description: External POI layer configured for the user
         attributes:
           type: object
+          description: Additional custom user attributes
           properties: {}
     Server:
       type: object
@@ -2324,40 +2357,61 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique server configuration identifier
         registration:
           type: boolean
+          description: Whether new user registrations are allowed
         readonly:
           type: boolean
+          description: When true only administrators can modify server-wide settings
         deviceReadonly:
           type: boolean
+          description: Disallow device attribute changes for non-admins
         limitCommands:
           type: boolean
+          description: Restrict command execution to supported protocol commands
         map:
           type: string
+          description: Default map layer identifier
         bingKey:
           type: string
+          description: Bing Maps API key used when Bing is selected as a provider
         mapUrl:
           type: string
+          description: Custom tile server URL template if configured
         poiLayer:
           type: string
+          description: External point-of-interest layer configuration
+        announcement:
+          type: string
+          description: Message displayed to all users in the web application
         latitude:
           type: number
+          description: Default map center latitude
         longitude:
           type: number
+          description: Default map center longitude
         zoom:
           type: integer
+          description: Default map zoom level
         version:
           type: string
+          description: Traccar server version string
         forceSettings:
           type: boolean
+          description: Forces users to use the server-wide settings instead of their own
         coordinateFormat:
           type: string
+          description: Default coordinate format for displaying positions
         openIdEnabled:
           type: boolean
+          description: Indicates whether OpenID authentication is available
         openIdForce:
           type: boolean
+          description: Require OpenID authentication for all users when enabled
         attributes:
           type: object
+          description: Additional server-level configuration values
           properties: {}
     Command:
       type: object
@@ -2365,15 +2419,23 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique saved command identifier
         deviceId:
           type: integer
           format: int64
+          description: Target device identifier when the command is bound to one device
         description:
           type: string
+          description: User friendly label displayed in the UI
         type:
           type: string
+          description: Command type as defined by the device protocol
+        textChannel:
+          type: boolean
+          description: Whether to send the command using the SMS channel
         attributes:
           type: object
+          description: Additional parameters required by the command type
           properties: {}
     Device:
       type: object
@@ -2381,14 +2443,19 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique identifier assigned by Traccar
         name:
           type: string
+          description: Human friendly device label
         uniqueId:
           type: string
+          description: Hardware or protocol specific unique identifier
         status:
           type: string
+          description: Current connection status such as online, offline, or unknown
         disabled:
           type: boolean
+          description: Whether the device is disabled by an administrator
         lastUpdate:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
@@ -2398,24 +2465,31 @@ components:
           type: integer
           format: int64
           nullable: true
+          description: Identifier of the last known position
         groupId:
           type: integer
           format: int64
           nullable: true
+          description: Parent group identifier when the device is assigned to a group
         phone:
           type: string
           nullable: true
+          description: Contact phone number used for SMS commands
         model:
           type: string
           nullable: true
+          description: Device model or hardware revision
         contact:
           type: string
           nullable: true
+          description: Responsible person's contact information
         category:
           type: string
           nullable: true
+          description: Free form category used for grouping devices in the UI
         attributes:
           type: object
+          description: Custom attributes for protocol or business specific data
           properties: {}
     Group:
       type: object
@@ -2423,13 +2497,17 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique group identifier
         name:
           type: string
+          description: Group display name
         groupId:
           type: integer
           format: int64
+          description: Parent group identifier for nested grouping
         attributes:
           type: object
+          description: Arbitrary metadata attached to the group
           properties: {}
     Permission:
       type: object
@@ -2491,23 +2569,30 @@ components:
       properties:
         type:
           type: string
+          description: Command type identifier
     Geofence:
       type: object
       properties:
         id:
           type: integer
           format: int64
+          description: Unique identifier for the geofence
         name:
           type: string
+          description: Human-readable name shown in lists and maps
         description:
           type: string
+          description: Details about the geofence for display in the UI
         area:
           type: string
+          description: Geofence area definition encoded as a WKT string
         calendarId:
           type: integer
           format: int64
+          description: Calendar identifier limiting when the geofence is active
         attributes:
           type: object
+          description: Custom key-value pairs for integrations or UI overrides
           properties: {}
     Notification:
       type: object
@@ -2515,37 +2600,48 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique identifier for the notification
         type:
           type: string
+          description: Notification category such as geofenceEnter or ignitionOn
         description:
           type: string
           nullable: true
+          description: User-defined text describing the notification
         always:
           type: boolean
+          description: Whether the notification triggers regardless of schedule
         commandId:
           type: integer
           format: int64
+          description: Identifier of the command to send when the notification triggers
         notificators:
           type: string
+          description: Comma-separated delivery channels (for example, web, mail)
         calendarId:
           type: integer
           format: int64
+          description: Calendar identifier restricting when the notification is active
         attributes:
           type: object
+          description: Additional custom attributes used by notificators or templates
           properties: {}
     NotificationType:
       type: object
       properties:
         type:
           type: string
+          description: Notification type identifier
     Event:
       type: object
       properties:
         id:
           type: integer
           format: int64
+          description: Unique event identifier
         type:
           type: string
+          description: Event type name
         eventTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
@@ -2553,16 +2649,21 @@ components:
         deviceId:
           type: integer
           format: int64
+          description: Device associated with the event
         positionId:
           type: integer
           format: int64
+          description: Position record linked to the event when applicable
         geofenceId:
           type: integer
           format: int64
+          description: Geofence referenced by the event if any
         maintenanceId:
           type: integer
+          description: Maintenance record tied to the event
         attributes:
           type: object
+          description: Additional event-specific attributes
           properties: {}
     ReportSummary:
       type: object
@@ -2570,8 +2671,10 @@ components:
         deviceId:
           type: integer
           format: int64
+          description: Device identifier for the summary row
         deviceName:
           type: string
+          description: Human readable device name
         maxSpeed:
           type: number
           description: in knots
@@ -2586,14 +2689,17 @@ components:
           description: in liters
         engineHours:
           type: integer
+          description: Engine hours accumulated for the report period, in milliseconds
     ReportTrips:
       type: object
       properties:
         deviceId:
           type: integer
           format: int64
+          description: Device identifier for the trip
         deviceName:
           type: string
+          description: Human readable device name
         maxSpeed:
           type: number
           description: in knots
@@ -2608,50 +2714,65 @@ components:
           description: in liters
         duration:
           type: integer
+          description: Trip duration in milliseconds
         startTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
           format: date-time
         startAddress:
           type: string
+          description: Address where the trip started
         startLat:
           type: number
+          description: Starting latitude in decimal degrees
         startLon:
           type: number
+          description: Starting longitude in decimal degrees
         endTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
           format: date-time
         endAddress:
           type: string
+          description: Address where the trip ended
         endLat:
           type: number
+          description: Ending latitude in decimal degrees
         endLon:
           type: number
+          description: Ending longitude in decimal degrees
         driverUniqueId:
           type: string
+          description: Unique identifier of the driver assigned to the trip
         driverName:
           type: string
+          description: Name of the driver assigned to the trip
     ReportStops:
       type: object
       properties:
         deviceId:
           type: integer
           format: int64
+          description: Device identifier for the stop
         deviceName:
           type: string
+          description: Human readable device name
         duration:
           type: integer
+          description: Stop duration in milliseconds
         startTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
           format: date-time
         address:
           type: string
+          description: Address where the stop occurred
         lat:
           type: number
+          description: Stop latitude in decimal degrees
         lon:
           type: number
+          description: Stop longitude in decimal degrees
         endTime:
           type: string
           description: in ISO 8601 format. eg. `1963-11-22T18:30:00Z`
@@ -2661,6 +2782,7 @@ components:
           description: in liters
         engineHours:
           type: integer
+          description: Engine hours accumulated during the stop, in milliseconds
     Statistics:
       type: object
       properties:
@@ -2670,38 +2792,48 @@ components:
           format: date-time
         activeUsers:
           type: integer
+          description: Number of active users in the capture period
         activeDevices:
           type: integer
+          description: Number of active devices in the capture period
         requests:
           type: integer
+          description: Total API requests processed
         messagesReceived:
           type: integer
+          description: Number of device messages received
         messagesStored:
           type: integer
+          description: Number of device messages stored to the database
     DeviceAccumulators:
       type: object
       properties:
         deviceId:
           type: integer
           format: int64
+          description: Device identifier for the accumulator entry
         totalDistance:
           type: number
           description: in meters
         hours:
           type: number
+          description: Total engine hours recorded by the device, in milliseconds
     Calendar:
       type: object
       properties:
         id:
           type: integer
           format: int64
+          description: Unique calendar identifier
         name:
           type: string
+          description: Calendar display name
         data:
           type: string
           description: base64 encoded in iCalendar format
         attributes:
           type: object
+          description: Custom calendar attributes
           properties: {}
     Attribute:
       type: object
@@ -2709,12 +2841,16 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique computed attribute identifier
         description:
           type: string
+          description: Human readable name of the attribute
         attribute:
           type: string
+          description: Attribute name used in expressions
         expression:
           type: string
+          description: Expression that defines how the attribute is calculated
         type:
           type: string
           description: String|Number|Boolean
@@ -2724,12 +2860,16 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique driver identifier
         name:
           type: string
+          description: Driver full name
         uniqueId:
           type: string
+          description: Unique external identifier for the driver
         attributes:
           type: object
+          description: Custom driver attributes
           properties: {}
     Maintenance:
       type: object
@@ -2737,16 +2877,83 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique maintenance item identifier
         name:
           type: string
+          description: Maintenance task name
         type:
           type: string
+          description: Metric the maintenance is based on
         start:
           type: number
+          description: Current accumulated value when maintenance tracking starts
         period:
           type: number
+          description: Threshold value after which maintenance is due
         attributes:
           type: object
+          description: Custom maintenance attributes
+          properties: {}
+    QueuedCommand:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Identifier of the queued command job
+        deviceId:
+          type: integer
+          format: int64
+          description: Device identifier the queued command will be delivered to
+        type:
+          type: string
+          description: Command type that will be executed
+        textChannel:
+          type: boolean
+          description: Indicates whether the queued command uses SMS delivery
+        attributes:
+          type: object
+          description: Stored parameters for the queued command
+          properties: {}
+    NotificationMessage:
+      type: object
+      properties:
+        subject:
+          type: string
+          description: Subject or title of the notification
+        digest:
+          type: string
+          description: Short summary shown in compact contexts; defaults to the body when omitted
+        body:
+          type: string
+          description: Full notification text
+        priority:
+          type: boolean
+          description: Whether the message should be treated as high priority
+      required:
+        - body
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique order identifier
+        uniqueId:
+          type: string
+          description: External order identifier used by clients
+        description:
+          type: string
+          description: Additional details about the order assignment
+        fromAddress:
+          type: string
+          description: Pickup location address
+        toAddress:
+          type: string
+          description: Destination address
+        attributes:
+          type: object
+          description: Custom order attributes
           properties: {}
   parameters:
     entityId:
