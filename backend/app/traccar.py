@@ -32,7 +32,7 @@ def _format_date(value):
 
 
 def get(path, request, device_id=None, from_date=None, to_date=None):
-    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
+    cookie = (request.headers.get("cookie") or request.headers.get("x-fleet-session")) if request and hasattr(request, "headers") else None
     headers = {"Cookie": cookie, "Accept": "application/json"}
 
     # Build query parameters
@@ -65,7 +65,7 @@ def _make_request_with_body(
     method, path, request, _id=None, name=None, description=None, area=None
 ):
     """Common function for PUT and POST requests with JSON body."""
-    cookie = request.headers.get("cookie") if request and hasattr(request, "headers") else None
+    cookie = (request.headers.get("cookie") or request.headers.get("x-fleet-session")) if request and hasattr(request, "headers") else None
     headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
 
     # Build request body with provided parameters
