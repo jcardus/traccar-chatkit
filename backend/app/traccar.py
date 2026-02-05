@@ -22,6 +22,16 @@ def _get_traccar_url(request):
     return "http://gps.frotaweb.com"
 
 
+def _get_cookie(request):
+    """Get cookie from x-fleet-session (with JSESSIONID= prefix) or fall back to cookie header."""
+    if not request or not hasattr(request, "headers"):
+        return None
+    fleet_session = request.headers.get("x-fleet-session")
+    if fleet_session:
+        return f"JSESSIONID={fleet_session}"
+    return request.headers.get("cookie")
+
+
 def _format_date(value):
     """Convert datetime objects to UTC and format as ISO 8601 with Z suffix"""
     if isinstance(value, datetime):
@@ -32,7 +42,7 @@ def _format_date(value):
 
 
 def get(path, request, device_id=None, from_date=None, to_date=None):
-    cookie = (request.headers.get("cookie") or request.headers.get("x-fleet-session")) if request and hasattr(request, "headers") else None
+    cookie = _get_cookie(request)
     headers = {"Cookie": cookie, "Accept": "application/json"}
 
     # Build query parameters
@@ -65,7 +75,7 @@ def _make_request_with_body(
     method, path, request, _id=None, name=None, description=None, area=None
 ):
     """Common function for PUT and POST requests with JSON body."""
-    cookie = (request.headers.get("cookie") or request.headers.get("x-fleet-session")) if request and hasattr(request, "headers") else None
+    cookie = _get_cookie(request)
     headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
 
     # Build request body with provided parameters
