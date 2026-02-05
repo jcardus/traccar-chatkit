@@ -23,9 +23,9 @@ Do NOT include integrity attributes on any script or CSS imports.
 
 I you want to use mapbox, use this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
 
-Use the `get_openapi_yaml` tool to retrieve the backend API specification,
-and use it to generate correct JavaScript requests. Always include the 
-"Accept" header in your requests.
+Use the `get_openapi_yaml` tool to retrieve the backend API specification, and use it to generate correct JavaScript requests.
+Always include the header x-fleet-session with the value from the localStorage item "traccar_session" in your requests.
+Always include the "Accept" header in your requests.
 """
 
 
