@@ -4,6 +4,7 @@ import {
   CHATKIT_API_DOMAIN_KEY,
 } from "../lib/config";
 import type { ColorScheme } from "../hooks/useColorScheme";
+import { useEffect } from "react";
 
 type ChatKitPanelProps = {
   theme: ColorScheme;
@@ -49,6 +50,17 @@ export function ChatKitPanel({
       return { success: false };
     }
   });
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "html-error") {
+        const errorReport = `The HTML you generated has a JavaScript error:\n\`\`\`\n${event.data.message}\n\`\`\`\nPlease fix the error and regenerate the HTML.`;
+        chatkit.sendUserMessage(errorReport);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [chatkit]);
 
   return (
     <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">

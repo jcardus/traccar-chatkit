@@ -29,7 +29,7 @@ export default function Home({
     if (invocation?.params?.html) {
         setShowMap(false);
         setShowHtml(true);
-        setHtmlContent(invocation?.params?.html);
+        setHtmlContent(invocation.params.html);
     }
   }
 
