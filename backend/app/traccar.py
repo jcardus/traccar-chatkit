@@ -23,7 +23,7 @@ def _get_cookie(request):
     if not request or not hasattr(request, "headers"):
         return None
     fleet_session = request.headers.get("x-fleet-session")
-    if fleet_session:
+    if fleet_session and fleet_session != "null":
         return f"JSESSIONID={fleet_session}"
     return request.headers.get("cookie")
 
@@ -47,17 +47,9 @@ def invoke(method, path, body, request):
 
     url = f"{_get_traccar_url(request).rstrip('/')}/api/{path.lstrip('/')}"
 
-    print(f"TRACCAR {method.upper()}: {url}")
-    print(f"Body: {body}")
+    print(f"{method.upper()} {url} {body}")
 
     parsed_body = json_module.loads(body) if body else None
     response = requests.request(method.upper(), url, headers=headers, json=parsed_body)
     response.raise_for_status()
-    json_response = response.json()
-
-    if isinstance(json_response, list):
-        print(f"Response: {len(json_response)} items, first 3: {json_response[:3]}")
-    else:
-        print(json_response)
-
-    return json_response
+    return response.json()
