@@ -97,7 +97,7 @@ def _save_html(html: str, email: str) -> str:
         f.write(html)
 
     url = f"https://chat.frotaweb.com/chatkit/{filename}"
-    print("html url", url)
+    print("PAGE: ", url)
     return url
 
 
