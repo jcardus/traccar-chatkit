@@ -128,6 +128,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_geofences,
             update_geofence,
             create_geofence,
+            create_driver,
             show_html,
             get_openapi_yaml,
             get_groups,
@@ -424,6 +425,21 @@ async def create_geofence(
         area=area,
         name=name,
         description=description,
+    )
+
+@function_tool(
+    description_override="create a driver"
+)
+async def create_driver(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        name: str,
+        unique_id: str
+) -> list[dict[str, Any]] | None:
+    return post(
+        "api/drivers",
+        ctx.context.request_context.get("request"),
+        name=name,
+        unique_id=unique_id
     )
 
 

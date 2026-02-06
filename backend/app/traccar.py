@@ -72,7 +72,7 @@ def get(path, request, device_id=None, from_date=None, to_date=None):
 
 
 def _make_request_with_body(
-    method, path, request, _id=None, name=None, description=None, area=None
+    method, path, request, _id=None, name=None, description=None, area=None, unique_id=None
 ):
     """Common function for PUT and POST requests with JSON body."""
     cookie = _get_cookie(request)
@@ -88,6 +88,8 @@ def _make_request_with_body(
         body["description"] = description
     if area is not None:
         body["area"] = area
+    if unique_id is not None:
+        body["uniqueId"] = unique_id
 
     # Build full URL
     url = f"{_get_traccar_url(request).rstrip('/')}/{path.lstrip('/')}"
@@ -113,5 +115,5 @@ def put(path, request, id=None, name=None, description=None, area=None):
     return _make_request_with_body("PUT", path, request, id, name, description, area)
 
 
-def post(path, request, name=None, description=None, area=None):
-    return _make_request_with_body("POST", path, request, None, name, description, area)
+def post(path, request, name=None, description=None, area=None, unique_id=None):
+    return _make_request_with_body("POST", path, request, None, name, description, area, unique_id)
