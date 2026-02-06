@@ -26,16 +26,6 @@ def _get_cookie(request):
     if fleet_session and fleet_session != "null":
         return f"JSESSIONID={fleet_session}"
     return request.headers.get("cookie")
-
-
-def _format_date(value):
-    """Convert datetime objects to UTC and format as ISO 8601 with Z suffix"""
-    if isinstance(value, datetime):
-        # Convert to UTC if timezone-aware, otherwise assume it's already UTC
-        utc_value = value.astimezone(timezone.utc) if value.tzinfo else value
-        return utc_value.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return value
-
 def invoke(method, path, body, request):
     """Generic API invocation with an arbitrary JSON body string."""
     import json as json_module
