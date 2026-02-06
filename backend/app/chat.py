@@ -337,7 +337,9 @@ async def invoke_api(
         ctx.context.request_context.get("request"),
     )
     response_size = len(json.dumps(result))
+    logger.info("invoke_api response size: %d bytes", response_size)
     if response_size > MAX_RESPONSE_SIZE:
+        logger.warning("Response too large: %d bytes, limit: %d", response_size, MAX_RESPONSE_SIZE)
         return {
             "error": f"Response too large ({response_size} bytes). "
             "Fetch this data client-side in your HTML using JavaScript fetch() instead."
