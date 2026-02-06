@@ -12,6 +12,7 @@ from typing import Annotated, Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
 import boto3
+import requests
 from agents import Agent, RunContextWrapper, Runner, function_tool
 from chatkit.agents import (
     AgentContext,
@@ -84,22 +85,31 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-def _save_html(html: str, email: str) -> None:
-    """Save HTML to a file and return the file URL."""
-    # Ensure the reports directory exists
+def _save_html(html: str, email: str) -> str:
+    """Save HTML to a file and return the public URL."""
     REPORTS_DIR.mkdir(exist_ok=True)
 
-    # Generate a unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"html_{timestamp}_{email}.html"
     file_path = REPORTS_DIR / filename
 
-    # Write HTML to a file
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    url = f"http://chat.frotaweb.com:8000/chatkit/{filename}"
+    url = f"https://chat.frotaweb.com/chatkit/{filename}"
     print("html url", url)
+    return url
+
+
+def _screenshot_url(url: str) -> str:
+    """Take a screenshot of a URL via microlink and return the image URL."""
+    resp = requests.get(
+        "https://api.microlink.io",
+        params={"url": url, "screenshot": "true", "embed": "screenshot.url"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.url
 
 
 def _is_tool_completion_item(item: Any) -> bool:
@@ -147,6 +157,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         tools = [
             invoke_api,
             show_html,
+            render_html,
             get_openapi_yaml,
         ]
         self.assistant = Agent[TraccarAgentContext](
@@ -362,6 +373,20 @@ async def show_html(
         arguments={"html": html},
     )
     return {"result": "success"}
+
+@function_tool(description_override="Render HTML in a headless browser and return a screenshot URL. Use this to verify that generated HTML looks correct.")
+async def render_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
+    print("render_html")
+    js_error = _validate_js_syntax(html)
+    if js_error:
+        return {"error": js_error}
+    try:
+        email = _get_user_email_from_traccar(ctx.context.request_context)
+        html_url = _save_html(html, email)
+        screenshot = _screenshot_url(html_url)
+        return {"screenshot_url": screenshot}
+    except Exception as e:
+        return {"error": str(e)}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
