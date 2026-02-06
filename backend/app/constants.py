@@ -41,4 +41,4 @@ Include a global error catching in your javascript and call window.parent.postMe
 
 
 
-MODEL = "gpt-5.2"
+MODEL = "gpt-5-mini"

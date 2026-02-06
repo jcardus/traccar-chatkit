@@ -24,7 +24,7 @@ from chatkit.types import (
 )
 from pydantic import TypeAdapter
 
-from .traccar import get
+from .traccar import invoke
 
 
 @dataclass
@@ -102,7 +102,7 @@ class SQLiteStore(Store[dict[str, Any]]):
             if not request:
                 return None
 
-            session = get("api/session", request)
+            session = invoke("get", "session",  "", request)
             return session.get("email") if session else None
         except Exception as e:
             print(f"Failed to get user from Traccar: {e}")

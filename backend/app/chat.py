@@ -31,7 +31,7 @@ from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .sqlite_store import SQLiteStore
-from .traccar import get, invoke, post, put
+from .traccar import invoke
 
 # If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)
@@ -280,46 +280,6 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
     return TraccarAssistantServer()
 
 
-@function_tool(description_override="get devices")
-async def get_devices(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
-    return get("api/devices", ctx.context.request_context.get("request"))
-
-
-@function_tool(description_override="get drivers")
-async def get_drivers(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
-    return get("api/drivers", ctx.context.request_context.get("request"))
-
-
-@function_tool(description_override="get current user session")
-async def get_session(ctx: RunContextWrapper[TraccarAgentContext]) -> dict[str, Any] | None:
-    return get("api/session", ctx.context.request_context.get("request"))
-
-
-@function_tool(description_override="get last known position for all devices")
-async def get_positions(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
-    return get("api/positions", ctx.context.request_context.get("request"))
-
-
-@function_tool(description_override="get groups")
-async def get_groups(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
-    return get("api/groups", ctx.context.request_context.get("request"))
-
-
-@function_tool(description_override="get device events for a given date range")
-async def get_device_events(
-    ctx: RunContextWrapper[TraccarAgentContext],
-    device_id: int,
-    from_date: datetime,
-    to_date: datetime,
-) -> list[dict[str, Any]] | None:
-    return get(
-        "api/reports/events",
-        ctx.context.request_context.get("request"),
-        device_id,
-        from_date,
-        to_date,
-    )
-
 @function_tool(description_override="invoke traccar api")
 async def invoke_api(
         ctx: RunContextWrapper[TraccarAgentContext],
@@ -335,123 +295,13 @@ async def invoke_api(
     )
 
 
-@function_tool(
-    description_override="get device summary data (maximum speed, average speed, distance travelled, spent fuel and engine hours) for a given date range. Speeds are in knots."
-)
-async def get_device_summary(
-    ctx: RunContextWrapper[TraccarAgentContext],
-    device_id: int,
-    from_date: datetime,
-    to_date: datetime,
-) -> list[dict[str, Any]] | None:
-    return get(
-        "api/reports/summary",
-        ctx.context.request_context.get("request"),
-        device_id,
-        from_date,
-        to_date,
-    )
-
-
-@function_tool(
-    description_override="get device trips for a given date range. 'from_date' and 'to_date' should include timezone"
-)
-async def get_device_trips(
-    ctx: RunContextWrapper[TraccarAgentContext],
-    device_id: int,
-    from_date: datetime,
-    to_date: datetime,
-) -> list[dict[str, Any]] | None:
-    return get(
-        "api/reports/trips",
-        ctx.context.request_context.get("request"),
-        device_id,
-        from_date,
-        to_date,
-    )
-
-
-@function_tool(description_override="get device stops for a given date range")
-async def get_device_stops(
-    ctx: RunContextWrapper[TraccarAgentContext],
-    device_id: int,
-    from_date: datetime,
-    to_date: datetime,
-) -> list[dict[str, Any]] | None:
-    return get(
-        "api/reports/stops",
-        ctx.context.request_context.get("request"),
-        device_id,
-        from_date,
-        to_date,
-    )
-
-
-@function_tool(description_override="get geofences")
-async def get_geofences(ctx: RunContextWrapper[TraccarAgentContext]) -> list[dict[str, Any]] | None:
-    return get("api/geofences", ctx.context.request_context.get("request"))
-
-
-@function_tool(
-    description_override="update a geofence, area is a wkt string, coordinate order is lat,lon"
-)
-async def update_geofence(
-    ctx: RunContextWrapper[TraccarAgentContext],
-    geofence_id: int,
-    area: str,
-    name: str,
-    description: str | None = None,
-) -> list[dict[str, Any]] | None:
-    return put(
-        f"api/geofences/{geofence_id}",
-        ctx.context.request_context.get("request"),
-        id=geofence_id,
-        area=area,
-        name=name,
-        description=description,
-    )
-
-
-@function_tool(
-    description_override="create a geofence, area is a wkt string, coordinate order is lat,lon"
-)
-async def create_geofence(
-    ctx: RunContextWrapper[TraccarAgentContext],
-    area: str,
-    name: str,
-    description: str | None = None,
-) -> list[dict[str, Any]] | None:
-    return post(
-        "api/geofences",
-        ctx.context.request_context.get("request"),
-        area=area,
-        name=name,
-        description=description,
-    )
-
-@function_tool(
-    description_override="create a driver"
-)
-async def create_driver(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        name: str,
-        unique_id: str
-) -> list[dict[str, Any]] | None:
-    return post(
-        "api/drivers",
-        ctx.context.request_context.get("request"),
-        name=name,
-        unique_id=unique_id
-    )
-
 def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
     """Get user email from Traccar session."""
     try:
         request = context.get("request")
         if not request:
             return None
-
-        session = get("api/session", request)
+        session = invoke("get", "session", "", request)
         return session.get("email") if session else None
     except Exception as e:
         print(f"Failed to get user from Traccar: {e}")
@@ -477,7 +327,7 @@ async def forward_to_real_agent(
     print("forward_to_real_agent")
     """Send the user's question to support via email."""
     request = ctx.context.request_context.get("request")
-    session = get("api/session", request) if request else None
+    session = invoke("get", "session", "", request) if request else None
     user_email = session.get("email") if session else "unknown"
     thread_id = ctx.context.thread.id
 
