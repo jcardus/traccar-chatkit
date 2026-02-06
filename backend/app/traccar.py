@@ -23,7 +23,7 @@ def _get_traccar_url(request):
 
 
 def _get_cookie(request):
-    """Get cookie from x-fleet-session (with JSESSIONID= prefix) or fall back to cookie header."""
+    """Get a cookie from x-fleet-session (with JSESSIONID= prefix) or fall back to cookie header."""
     if not request or not hasattr(request, "headers"):
         return None
     fleet_session = request.headers.get("x-fleet-session")
@@ -117,3 +117,28 @@ def put(path, request, id=None, name=None, description=None, area=None):
 
 def post(path, request, name=None, description=None, area=None, unique_id=None):
     return _make_request_with_body("POST", path, request, None, name, description, area, unique_id)
+
+
+def invoke(method, path, body, request):
+    """Generic API invocation with an arbitrary JSON body string."""
+    import json as json_module
+
+    cookie = _get_cookie(request)
+    headers = {"Cookie": cookie, "Accept": "application/json", "Content-Type": "application/json"}
+
+    url = f"{_get_traccar_url(request).rstrip('/')}/api/{path.lstrip('/')}"
+
+    print(f"TRACCAR {method.upper()}: {url}")
+    print(f"Body: {body}")
+
+    parsed_body = json_module.loads(body) if body else None
+    response = requests.request(method.upper(), url, headers=headers, json=parsed_body)
+    response.raise_for_status()
+    json_response = response.json()
+
+    if isinstance(json_response, list):
+        print(f"Response: {len(json_response)} items, first 3: {json_response[:3]}")
+    else:
+        print(json_response)
+
+    return json_response

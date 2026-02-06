@@ -31,7 +31,7 @@ from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .sqlite_store import SQLiteStore
-from .traccar import get, post, put
+from .traccar import get, invoke, post, put
 
 # If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)
@@ -117,21 +117,9 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         self.store: SQLiteStore = SQLiteStore()
         super().__init__(self.store)
         tools = [
-            get_device_events,
-            get_device_stops,
-            get_device_summary,
-            get_device_trips,
-            get_devices,
-            get_drivers,
-            get_positions,
-            get_session,
-            get_geofences,
-            update_geofence,
-            create_geofence,
-            create_driver,
+            invoke_api,
             show_html,
             get_openapi_yaml,
-            get_groups,
         ]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=cast(Any, tools)
@@ -330,6 +318,20 @@ async def get_device_events(
         device_id,
         from_date,
         to_date,
+    )
+
+@function_tool(description_override="invoke traccar api")
+async def invoke_api(
+        ctx: RunContextWrapper[TraccarAgentContext],
+        method: str,
+        path: str,
+        body: str,
+):
+    return invoke(
+        method,
+        path,
+        body,
+        ctx.context.request_context.get("request"),
     )
 
 

@@ -183,7 +183,7 @@ class SQLiteStore(Store[dict[str, Any]]):
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
-            # Exclude 'items' field when saving to ensure we only save ThreadMetadata
+            # Exclude the 'items' field when saving to ensure we only save ThreadMetadata
             thread_dict = thread.model_dump(exclude={"items"})
             thread_json = json.dumps(thread_dict, default=str)
             created_at = thread.created_at or datetime.utcnow()
