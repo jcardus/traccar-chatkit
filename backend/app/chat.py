@@ -36,8 +36,8 @@ from .constants import INSTRUCTIONS, MODEL
 from .sqlite_store import SQLiteStore
 from .traccar import invoke
 
-# If you want to check what's going on under the hood, set this to DEBUG
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
@@ -97,7 +97,7 @@ def _save_html(html: str, email: str) -> str:
         f.write(html)
 
     url = f"https://chat.frotaweb.com/chatkit/{filename}"
-    print("PAGE: ", url)
+    logger.info("Saved HTML: %s", url)
     return url
 
 
@@ -354,17 +354,17 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
         session = invoke("get", "session", "", request)
         return session.get("email") if session else None
     except Exception as e:
-        print(f"Failed to get user from Traccar: {e}")
+        logger.warning("Failed to get user from Traccar: %s", e)
         return None
 
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
 ) -> dict[str, str]:
-    print("TOOL: show_html")
+    logger.info("TOOL: show_html")
     js_error = _validate_js_syntax(html)
     if js_error:
-        print(f"JS validation failed: {js_error}")
+        logger.warning("JS validation failed: %s", js_error)
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
     _save_html(html, email)
@@ -376,7 +376,7 @@ async def show_html(
 
 @function_tool(description_override="Render HTML in a headless browser and return a screenshot URL. Use this to verify that generated HTML looks correct.")
 async def render_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
-    print("TOOL: render_html")
+    logger.info("TOOL: render_html")
     js_error = _validate_js_syntax(html)
     if js_error:
         return {"error": js_error}
@@ -392,7 +392,7 @@ async def render_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) ->
 async def forward_to_real_agent(
     ctx: RunContextWrapper[TraccarAgentContext], question: str
 ) -> str:
-    print("forward_to_real_agent")
+    logger.info("forward_to_real_agent")
     """Send the user's question to support via email."""
     request = ctx.context.request_context.get("request")
     session = invoke("get", "session", "", request) if request else None
@@ -416,5 +416,5 @@ async def forward_to_real_agent(
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
 async def get_openapi_yaml() -> str:
-    print("TOOL: get_openapi_yaml")
+    logger.info("TOOL: get_openapi_yaml")
     return (Path(__file__).parent / "openapi.yaml").read_text()

@@ -1,10 +1,12 @@
-from datetime import datetime, timezone
+import logging
 
 import requests
 
+logger = logging.getLogger(__name__)
+
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
-    print(f"Request origin: {origin}")
+    logger.info("Request origin: %s", origin)
     fleetmap_origins = [
         "https://moviflotte.com",
         "https://localizalia.net",
@@ -37,7 +39,7 @@ def invoke(method, path, body, request):
 
     url = f"{_get_traccar_url(request).rstrip('/')}/api/{path.lstrip('/')}"
 
-    print(f"{method.upper()} {url} {body}")
+    logger.info("%s %s %s", method.upper(), url, body)
 
     parsed_body = json_module.loads(body) if body else None
     response = requests.request(method.upper(), url, headers=headers, json=parsed_body)
