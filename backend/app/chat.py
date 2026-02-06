@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import boto3
 from agents import Agent, RunContextWrapper, Runner, function_tool
+from agents.mcp import MCPServerStdio
 from chatkit.agents import (
     AgentContext,
     ClientToolCall,
@@ -34,7 +35,7 @@ from .sqlite_store import SQLiteStore
 from .traccar import invoke
 
 # If you want to check what's going on under the hood, set this to DEBUG
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
@@ -116,15 +117,36 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
         self.store: SQLiteStore = SQLiteStore()
         super().__init__(self.store)
+        self.google_maps_mcp = MCPServerStdio(
+            params={"command": "npx", "args": ["-y", "@googlemaps/code-assist-mcp@latest"]},
+            cache_tools_list=True,
+            name="Google Maps Docs",
+            client_session_timeout_seconds=30,
+            max_retry_attempts=2,
+            retry_backoff_seconds_base=1.0,
+        )
+        self._mcp_connected = False
         tools = [
             invoke_api,
             show_html,
             get_openapi_yaml,
         ]
         self.assistant = Agent[TraccarAgentContext](
-            model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=cast(Any, tools)
+            model=MODEL,
+            name="Traccar Assistant",
+            instructions=INSTRUCTIONS,
+            tools=cast(Any, tools),
+            mcp_servers=[self.google_maps_mcp],
         )
         self._thread_item_converter = self._init_thread_item_converter()
+
+    async def _ensure_mcp_connected(self) -> None:
+        if self._mcp_connected and self.google_maps_mcp.session is None:
+            logging.warning("Google Maps MCP session lost, reconnecting...")
+            self._mcp_connected = False
+        if not self._mcp_connected:
+            await self.google_maps_mcp.connect()
+            self._mcp_connected = True
 
     async def respond(
         self,
@@ -132,6 +154,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         item: UserMessageItem | None,
         context: dict[str, Any],
     ) -> AsyncIterator[ThreadStreamEvent]:
+        await self._ensure_mcp_connected()
         agent_context = TraccarAgentContext(
             thread=thread,
             store=self.store,

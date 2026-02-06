@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+
 INSTRUCTIONS = """
 You are a GPS fleet tracking platform assistant.
 
@@ -31,13 +35,16 @@ Any request to /api from your generated JavaScript will reach the API
 
 Do NOT include integrity attributes on any script or CSS imports.
 
-I you want to use Mapbox GL JS, use version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
+When rendering maps, use Google Maps JavaScript API with this script tag:
+<script async src="https://maps.googleapis.com/maps/api/js?key={google_maps_key}&loading=async&callback=initMap"></script>
+
+Use the retrieve-google-maps-platform-docs tool to look up correct code patterns before generating map HTML.
 
 If localStorage item "traccar_session" exists, always include it in the header x-fleet-session in your requests.
 Always include the "Accept" header in your requests.
 
 Include a global error catching in your javascript and call window.parent.postMessage with type 'html-error', this way the error will be sent back to you in a user message.
-"""
+""".format(google_maps_key=GOOGLE_MAPS_API_KEY)
 
 
 

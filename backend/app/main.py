@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from chatkit.server import StreamingResult
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -13,7 +15,15 @@ from .chat import (
     create_chatkit_server,
 )
 
-app = FastAPI(title="ChatKit API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    if _chatkit_server is not None:
+        await _chatkit_server.google_maps_mcp.cleanup()
+
+
+app = FastAPI(title="ChatKit API", lifespan=lifespan)
 
 _chatkit_server: TraccarAssistantServer | None = create_chatkit_server()
 
