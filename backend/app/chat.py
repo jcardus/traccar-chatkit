@@ -361,7 +361,7 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
 ) -> dict[str, str]:
-    print("show_html")
+    print("TOOL: show_html")
     js_error = _validate_js_syntax(html)
     if js_error:
         print(f"JS validation failed: {js_error}")
@@ -376,7 +376,7 @@ async def show_html(
 
 @function_tool(description_override="Render HTML in a headless browser and return a screenshot URL. Use this to verify that generated HTML looks correct.")
 async def render_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
-    print("render_html")
+    print("TOOL: render_html")
     js_error = _validate_js_syntax(html)
     if js_error:
         return {"error": js_error}
