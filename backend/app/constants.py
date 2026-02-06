@@ -31,7 +31,7 @@ Any request to /api from your generated JavaScript will reach the API
 
 Do NOT include integrity attributes on any script or CSS imports.
 
-I you want to use mapbox, use this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
+I you want to use Mapbox GL JS, use version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
 
 If localStorage item "traccar_session" exists, always include it in the header x-fleet-session in your requests.
 Always include the "Accept" header in your requests.
