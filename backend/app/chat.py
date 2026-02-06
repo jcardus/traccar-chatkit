@@ -56,17 +56,17 @@ def _gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:8]}"
 
 
-def _save_html(html: str, thread_id: str) -> None:
+def _save_html(html: str, email: str) -> None:
     """Save HTML to a file and return the file URL."""
-    # Ensure reports directory exists
+    # Ensure the reports directory exists
     REPORTS_DIR.mkdir(exist_ok=True)
 
-    # Generate unique filename with thread_id
+    # Generate a unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"html_{thread_id}_{timestamp}_{uuid4().hex[:8]}.html"
+    filename = f"html_{timestamp}_{email}.html"
     file_path = REPORTS_DIR / filename
 
-    # Write HTML to file
+    # Write HTML to a file
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -444,13 +444,26 @@ async def create_driver(
         unique_id=unique_id
     )
 
+def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
+    """Get user email from Traccar session."""
+    try:
+        request = context.get("request")
+        if not request:
+            return None
+
+        session = get("api/session", request)
+        return session.get("email") if session else None
+    except Exception as e:
+        print(f"Failed to get user from Traccar: {e}")
+        return None
 
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
 ) -> dict[str, str] | None:
     print("show_html")
-    _save_html(html, ctx.context.thread.id)
+    email = _get_user_email_from_traccar(ctx.context.request_context)
+    _save_html(html, email)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
