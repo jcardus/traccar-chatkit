@@ -319,7 +319,7 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
     return TraccarAssistantServer()
 
 
-MAX_RESPONSE_SIZE: Final[int] = 10485760  # 10MB
+MAX_RESPONSE_SIZE: Final[int] = 1048576  # 1MB
 
 
 @function_tool(description_override="invoke traccar api")
