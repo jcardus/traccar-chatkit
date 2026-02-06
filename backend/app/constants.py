@@ -27,7 +27,8 @@ RENDERING HTML
 You can use the show_html tool to render HTML, it will be shown on the interface.
 You should use this option when invoke_api tool returns the error 'Response too large'.
 
-You can use the invoke_api tool to get a session token to include in the client side requests
+For the client side requests, you have to include an authorization header (bearer) that you get with the invoke_api tool using the session/token path. 
+You need to include the base url referenced as one of the servers in the specification
 
 Do NOT include integrity attributes on any script or CSS imports.
 
