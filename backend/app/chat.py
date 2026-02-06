@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import inspect
 import logging
+import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, AsyncIterator, Final, cast
@@ -54,6 +56,32 @@ def _normalize_color_scheme(value: str) -> str:
 
 def _gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:8]}"
+
+
+def _validate_js_syntax(html: str) -> str | None:
+    """Extract and validate JavaScript syntax from HTML. Returns error message or None if valid."""
+    script_pattern = re.compile(r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
+    scripts = script_pattern.findall(html)
+
+    if not scripts:
+        return None
+
+    for i, script in enumerate(scripts):
+        script = script.strip()
+        if not script:
+            continue
+        # Use Node.js to check syntax (new Function parses but doesn't execute)
+        result = subprocess.run(
+            ["node", "-e", f"new Function({repr(script)})"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            error = result.stderr.strip()
+            return f"JavaScript syntax error in script block {i + 1}: {error}"
+
+    return None
 
 
 def _save_html(html: str, email: str) -> None:
@@ -280,6 +308,9 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
     return TraccarAssistantServer()
 
 
+MAX_RESPONSE_SIZE: Final[int] = 10485760  # 10MB
+
+
 @function_tool(description_override="invoke traccar api")
 async def invoke_api(
         ctx: RunContextWrapper[TraccarAgentContext],
@@ -287,12 +318,20 @@ async def invoke_api(
         path: str,
         body: str,
 ):
-    return invoke(
+    import json
+    result = invoke(
         method,
         path,
         body,
         ctx.context.request_context.get("request"),
     )
+    response_size = len(json.dumps(result))
+    if response_size > MAX_RESPONSE_SIZE:
+        return {
+            "error": f"Response too large ({response_size} bytes). "
+            "Fetch this data client-side in your HTML using JavaScript fetch() instead."
+        }
+    return result
 
 
 def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
@@ -310,8 +349,12 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
-) -> dict[str, str] | None:
+) -> dict[str, str]:
     print("show_html")
+    js_error = _validate_js_syntax(html)
+    if js_error:
+        print(f"JS validation failed: {js_error}")
+        return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
     _save_html(html, email)
     ctx.context.client_tool_call = ClientToolCall(

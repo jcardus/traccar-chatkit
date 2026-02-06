@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 import requests
 
-
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
     print(f"Request origin: {origin}")
@@ -19,8 +18,6 @@ def _get_traccar_url(request):
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "https://traccar-eu.joaquim.workers.dev"
     return "http://gps.frotaweb.com"
-
-
 def _get_cookie(request):
     """Get a cookie from x-fleet-session (with JSESSIONID= prefix) or fall back to cookie header."""
     if not request or not hasattr(request, "headers"):
