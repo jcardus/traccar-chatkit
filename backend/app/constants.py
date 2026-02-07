@@ -27,9 +27,6 @@ RENDERING HTML
 You can use the show_html tool to render HTML, it will be shown on the interface.
 You should use this option when invoke_api tool returns the error 'Response too large'.
 
-For the client side requests, you have to include an authorization header (bearer) that you get with the invoke_api tool using the session/token path. 
-You need to include the base url referenced as one of the servers in the specification
-
 Do NOT include integrity attributes on any script or CSS imports.
 
 If you want to use Mapbox GL JS, use version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 from chatkit.server import StreamingResult
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -12,6 +13,7 @@ from .chat import (
     TraccarAssistantServer,
     create_chatkit_server,
 )
+from .traccar import _get_cookie, _get_traccar_url
 
 app = FastAPI(title="ChatKit API")
 
@@ -28,6 +30,38 @@ def get_chatkit_server() -> TraccarAssistantServer:
             ),
         )
     return _chatkit_server
+
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_traccar(request: Request, path: str) -> Response:
+    """Reverse-proxy /api/* requests to the Traccar server."""
+    traccar_url = f"{_get_traccar_url(request).rstrip('/')}/api/{path}"
+    if request.url.query:
+        traccar_url += f"?{request.url.query}"
+
+    cookie = _get_cookie(request)
+    headers = {"Accept": "application/json"}
+    if cookie:
+        headers["Cookie"] = cookie
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    body = await request.body()
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.request(
+            request.method,
+            traccar_url,
+            headers=headers,
+            content=body or None,
+        )
+
+    excluded = {"transfer-encoding", "content-encoding", "content-length"}
+    resp_headers = {
+        k: v for k, v in resp.headers.items() if k.lower() not in excluded
+    }
+    return Response(content=resp.content, status_code=resp.status_code, headers=resp_headers)
 
 
 @app.get("/chatkit/{filename}")
