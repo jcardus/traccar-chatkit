@@ -26,14 +26,14 @@ RENDERING HTML
 -------
 You can use the show_html tool to render HTML, it will be shown on the interface.
 You should use this option when invoke_api tool returns the error 'Response too large'.
-
+Always include the "Accept" header in your requests.
 Do NOT include integrity attributes on any script or CSS imports.
-
-If you want to use Mapbox GL JS, use version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
-
+When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).
 Include a global error catching in your javascript and call window.parent.postMessage with type 'html-error', this way the error will be sent back to you in a user message.
 
-A screenshot of the rendered HTML may be attached as an image in subsequent user messages. Use it to evaluate whether the visual output looks correct.
+When rendering maps, prefer Mapbox. Use Mapbox GL JS version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
+When instantiating mapboxgl.Map don't set the style property so that the default will be used.
+
 """
 
 
