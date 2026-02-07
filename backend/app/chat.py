@@ -33,7 +33,7 @@ from openai.types.responses import ResponseInputContentParam
 from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
-from .sqlite_store import SQLiteStore
+from .neon_store import NeonStore
 from .traccar import invoke
 
 logging.basicConfig(level=logging.INFO)
@@ -138,7 +138,7 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
 
 class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    store: Annotated[SQLiteStore, Field(exclude=True)]
+    store: Annotated[NeonStore, Field(exclude=True)]
     request_context: dict[str, Any]
 
 
@@ -153,7 +153,7 @@ def _user_message_text(item: UserMessageItem) -> str:
 
 class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
-        self.store: SQLiteStore = SQLiteStore()
+        self.store: NeonStore = NeonStore()
         super().__init__(self.store)
         tools = [
             invoke_api,
