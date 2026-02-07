@@ -60,6 +60,7 @@ def _gen_id(prefix: str) -> str:
 
 
 def _validate_js_syntax(html: str) -> str | None:
+    logger.info("_validate_js_syntax")
     """Extract and validate JavaScript syntax from HTML. Returns error message or None if valid."""
     script_pattern = re.compile(r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
     scripts = script_pattern.findall(html)
@@ -81,7 +82,7 @@ def _validate_js_syntax(html: str) -> str | None:
         if result.returncode != 0:
             error = result.stderr.strip()
             return f"JavaScript syntax error in script block {i + 1}: {error}"
-
+    logger.info("syntax ok")
     return None
 
 
@@ -363,7 +364,6 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
 ) -> dict[str, str]:
-    logger.info("TOOL: show_html")
     js_error = _validate_js_syntax(html)
     if js_error:
         logger.warning("JS validation failed: %s", js_error)
@@ -374,6 +374,7 @@ async def show_html(
         name="show_html",
         arguments={"html": html},
     )
+    logger.info("TOOL: show_html -> success")
     return {"result": "success"}
 
 @function_tool(description_override="Render HTML in a headless browser and return a screenshot URL. Use this to verify that generated HTML looks correct.")

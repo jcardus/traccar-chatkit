@@ -54,7 +54,7 @@ export function ChatKitPanel({
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "html-error") {
-        const text = `The HTML you generated has a JavaScript error:\n\`\`\`\n${event.data.message}\n\`\`\`\nPlease fix the error and regenerate the HTML.`;
+        const text = event.data.message
         chatkit.sendUserMessage({text}).then();
       }
     };

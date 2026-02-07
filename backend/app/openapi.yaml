@@ -11,7 +11,7 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0.html
   version: '6.11.1'
 servers:
-  - url: https://dash.frotaweb.com/api
+  - url: /api
 security:
   - ApiKey: []
 tags:
