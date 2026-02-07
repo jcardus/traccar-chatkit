@@ -55,7 +55,14 @@ export function ChatKitPanel({
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "html-error") {
         const text = event.data.message
-        chatkit.sendUserMessage({text}).then();
+        const trySend = async () => {
+          try {
+            await chatkit.sendUserMessage({text})
+          } catch (e) {
+            console.error(e)
+            setTimeout(trySend, 500)
+          }
+        }
       }
     };
     window.addEventListener("message", handleMessage);
