@@ -86,8 +86,8 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-def _save_html(html: str, email: str) -> str:
-    """Save HTML to a file and return the public URL."""
+async def _save_html(html: str, email: str, store: NeonStore, thread_id: str) -> str:
+    """Save HTML to a file, persist the URL in the database, and return the public URL."""
     REPORTS_DIR.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,6 +99,7 @@ def _save_html(html: str, email: str) -> str:
 
     url = f"https://chat.frotaweb.com/chatkit/{filename}"
     logger.info("Saved HTML: %s", url)
+    await store.save_html_report(email, thread_id, url)
     return url
 
 
@@ -369,7 +370,7 @@ async def show_html(
         logger.warning("JS validation failed: %s", js_error)
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
-    _save_html(html, email)
+    await _save_html(html, email, ctx.context.store, ctx.context.thread.id)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
@@ -385,7 +386,7 @@ async def render_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) ->
         return {"error": js_error}
     try:
         email = _get_user_email_from_traccar(ctx.context.request_context)
-        html_url = _save_html(html, email)
+        html_url = await _save_html(html, email, ctx.context.store, ctx.context.thread.id)
         screenshot = _screenshot_url(html_url)
         return {"screenshot_url": screenshot}
     except Exception as e:
