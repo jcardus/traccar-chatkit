@@ -35,7 +35,7 @@ def _real_ip(request: Request) -> str:
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     ip = _real_ip(request)
-    logger.info("%s %s %s headers=%s", ip, request.method, request.url.path, dict(request.headers))
+    logger.info("%s %s %s %s", ip, request.method, request.url.path, request.headers.get('cf-ipcountry'))
     return await call_next(request)
 
 

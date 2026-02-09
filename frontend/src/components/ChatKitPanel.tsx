@@ -45,7 +45,8 @@ export function ChatKitPanel({
         return { success: true };
       } else if (invocation.name === "show_html") {
         onShowHtml(invocation);
-        const screenshotUrl = invocation.args?.screenshot_url;
+        console.log(invocation)
+        const screenshotUrl = invocation.params?.screenshot_url;
         if (screenshotUrl) {
           setTimeout(() => {
             chatkit.sendUserMessage({
