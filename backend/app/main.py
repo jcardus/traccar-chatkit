@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 from chatkit.server import StreamingResult
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 from .chat import (
     REPORTS_DIR,
@@ -18,6 +22,22 @@ from .traccar import _get_cookie, _get_traccar_url
 app = FastAPI(title="ChatKit API")
 
 _chatkit_server: TraccarAssistantServer | None = create_chatkit_server()
+
+
+def _real_ip(request: Request) -> str:
+    """Get the real client IP behind Cloudflare."""
+    return (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.client.host if request.client else "unknown"
+    )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    ip = _real_ip(request)
+    logger.info("%s %s %s", ip, request.method, request.url.path)
+    return await call_next(request)
 
 
 def get_chatkit_server() -> TraccarAssistantServer:
