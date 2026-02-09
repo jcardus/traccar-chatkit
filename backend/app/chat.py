@@ -140,6 +140,7 @@ class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     store: Annotated[NeonStore, Field(exclude=True)]
     request_context: dict[str, Any]
+    screenshot_url: str | None = None
 
 
 def _user_message_text(item: UserMessageItem) -> str:
@@ -202,6 +203,30 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             yield event
 
         response_identifier = getattr(result, "last_response_id", None)
+
+        # If a screenshot was captured, run the model again with the image
+        if agent_context.screenshot_url:
+            logger.info("Follow-up with screenshot: %s", agent_context.screenshot_url)
+            image_input = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "Here is the screenshot of the HTML you just rendered. Check if it looks correct and tell the user if you notice any issues."},
+                        {"type": "input_image", "image_url": agent_context.screenshot_url},
+                    ],
+                }
+            ]
+            agent_context.screenshot_url = None
+            followup = Runner.run_streamed(
+                self.assistant,
+                image_input,
+                context=agent_context,
+                previous_response_id=response_identifier,
+            )
+            async for event in stream_agent_response(agent_context, followup):
+                yield event
+            response_identifier = getattr(followup, "last_response_id", None)
+
         if response_identifier is not None:
             metadata["previous_response_id"] = response_identifier
             thread.metadata = metadata
@@ -363,19 +388,21 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
 ) -> dict[str, str]:
+    logger.info("TOOL: show_html")
     js_error = _validate_js_syntax(html)
     if js_error:
         logger.warning("JS validation failed: %s", js_error)
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
     html_url = _save_html_file(html, email)
-    screenshot = _screenshot_url(html_url)
-    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot)
+    screenshot_url = _screenshot_url(html_url)
+    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
+    ctx.context.screenshot_url = screenshot_url
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
     )
-    return {"screenshot_url": screenshot}
+    return {"screenshot_url": screenshot_url}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
