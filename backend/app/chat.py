@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -13,6 +14,7 @@ from typing import Annotated, Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
 import boto3
+import requests
 from agents import Agent, RunContextWrapper, Runner, function_tool
 from chatkit.agents import (
     AgentContext,
@@ -371,6 +373,8 @@ async def show_html(
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
 
         screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
+        # Fire-and-forget: warm the microlink cache so next fetch is instant
+        asyncio.create_task(asyncio.to_thread(requests.get, screenshot_url, timeout=30))
         attachment_id = _gen_id("att")
         attachment = ImageAttachment(
             id=attachment_id,
