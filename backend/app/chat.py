@@ -104,12 +104,14 @@ def _save_html_file(html: str, email: str) -> str:
 
 def _screenshot_url(url: str) -> str:
     """Take a screenshot of a URL via microlink and return the image URL."""
+    logger.info("Taking screenshot of %s", url)
     resp = requests.get(
         "https://api.microlink.io",
-        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "10000", "screenshot.delay": 3},
+        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "10000"},
         timeout=30,
     )
     resp.raise_for_status()
+    logger.info("Screenshot ready: %s (%d bytes)", resp.url, len(resp.content))
     return resp.url
 
 
@@ -390,7 +392,7 @@ async def show_html(
     html_url = _save_html_file(html, email)
     screenshot_url = _screenshot_url(html_url)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
-    # Store for next turn so the model can see the rendered result
+    # Store for the next turn so the model can see the rendered result
     thread = ctx.context.thread
     metadata = dict(getattr(thread, "metadata", {}) or {})
     metadata["pending_screenshot"] = screenshot_url
