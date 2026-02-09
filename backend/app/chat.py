@@ -102,16 +102,23 @@ def _save_html_file(html: str, email: str) -> str:
     return url
 
 
-def _screenshot_url(url: str) -> str:
+def _screenshot_url(url: str) -> str | None:
     """Take a screenshot of a URL via microlink and return the image URL."""
     logger.info("Taking screenshot of %s", url)
-    resp = requests.get(
-        "https://api.microlink.io",
-        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "15000"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    logger.info("Screenshot ready: %s (%d bytes)", resp.url, len(resp.content))
+    try:
+        resp = requests.get(
+            "https://api.microlink.io",
+            params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "15000"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+    except requests.exceptions.Timeout:
+        logger.error("Screenshot timed out for %s", url)
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error("Screenshot failed for %s: %s", url, e)
+        return None
+    logger.info("Screenshot ready: %s (%d bytes, status %d)", resp.url, len(resp.content), resp.status_code)
     return resp.url
 
 
@@ -393,11 +400,12 @@ async def show_html(
     screenshot_url = _screenshot_url(html_url)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
     # Store for the next turn so the model can see the rendered result
-    thread = ctx.context.thread
-    metadata = dict(getattr(thread, "metadata", {}) or {})
-    metadata["pending_screenshot"] = screenshot_url
-    thread.metadata = metadata
-    await ctx.context.store.save_thread(thread, ctx.context.request_context)
+    if screenshot_url:
+        thread = ctx.context.thread
+        metadata = dict(getattr(thread, "metadata", {}) or {})
+        metadata["pending_screenshot"] = screenshot_url
+        thread.metadata = metadata
+        await ctx.context.store.save_thread(thread, ctx.context.request_context)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
