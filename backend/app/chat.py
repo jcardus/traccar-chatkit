@@ -110,7 +110,7 @@ def _screenshot_url(url: str) -> str | None:
     try:
         resp = requests.get(
             "https://api.microlink.io",
-            params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "15000"},
+            params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "10000"},
             timeout=60,
         )
         resp.raise_for_status()
@@ -192,6 +192,8 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         target_item: ThreadItem | None = item
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
+
+        logger.info("respond: item=%s target_item=%s type=%s", type(item).__name__ if item else None, type(target_item).__name__ if target_item else None, getattr(target_item, "type", None))
 
         if target_item is None:
             return

@@ -36,7 +36,7 @@ def _real_ip(request: Request) -> str:
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     ip = _real_ip(request)
-    logger.info("%s %s %s", ip, request.method, request.url.path)
+    logger.info("%s %s %s headers=%s", ip, request.method, request.url.path, dict(request.headers))
     return await call_next(request)
 
 
