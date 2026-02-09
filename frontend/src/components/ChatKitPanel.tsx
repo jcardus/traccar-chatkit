@@ -45,17 +45,23 @@ export function ChatKitPanel({
         return { success: true };
       } else if (invocation.name === "show_html") {
         onShowHtml(invocation);
-        console.log(invocation)
-        const screenshotUrl = invocation.params?.screenshot_url;
-        if (screenshotUrl) {
-          setTimeout(() => {
-            chatkit.sendUserMessage({
-              content: [
-                { type: "input_image", image_url: screenshotUrl },
-                { type: "input_text", text: "This is the screenshot of the HTML you just rendered. If it looks broken or blank, briefly tell the user and offer to fix it. Otherwise say nothing about it." },
-              ],
-            }).catch((e) => console.error("Failed to send screenshot message:", e));
-          }, 500);
+        const htmlUrl = invocation.params?.html_url;
+        if (htmlUrl) {
+          const screenshotUrl = `https://api.microlink.io?url=${encodeURIComponent(htmlUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=10000`;
+          const send = async () => {
+            try {
+              await chatkit.sendUserMessage({
+                content: [
+                  { type: "input_image", image_url: screenshotUrl },
+                  { type: "input_text", text: "This is the screenshot of the HTML you just rendered. If it looks broken or blank, briefly tell the user and offer to fix it. Otherwise say nothing about it." },
+                ],
+              });
+            } catch (e) {
+              console.error("Failed to send screenshot message:", e);
+              setTimeout(send, 5000);
+            }
+          };
+          send();
         }
         return { success: true };
       }

@@ -12,7 +12,6 @@ from typing import Annotated, Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
 import boto3
-import requests
 from agents import Agent, RunContextWrapper, Runner, function_tool
 from chatkit.agents import (
     AgentContext,
@@ -92,7 +91,7 @@ def _save_html_file(html: str, email: str) -> str:
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_email = re.sub(r"[^a-zA-Z0-9._-]", "_", email or "unknown")
-    filename = f"html_{timestamp}_{safe_email}.html"
+    filename = f"{timestamp}_{safe_email}.html"
     file_path = REPORTS_DIR / filename
 
     with open(file_path, "w", encoding="utf-8") as f:
@@ -101,27 +100,6 @@ def _save_html_file(html: str, email: str) -> str:
     url = f"https://chat.frotaweb.com/chatkit/{filename}"
     logger.info("Saved HTML: %s", url)
     return url
-
-
-def _screenshot_url(url: str) -> str | None:
-    """Take a screenshot of a URL via microlink and return the image URL."""
-    logger.info("Taking screenshot of %s", url)
-    try:
-        resp = requests.get(
-            "https://api.microlink.io",
-            params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "10000"},
-            timeout=60,
-        )
-        resp.raise_for_status()
-    except requests.exceptions.Timeout:
-        logger.error("Screenshot timed out for %s", url)
-        return None
-    except requests.exceptions.RequestException as e:
-        logger.error("Screenshot failed for %s: %s", url, e)
-        return None
-    logger.info("Screenshot ready: %s (%d bytes, status %d)", resp.url, len(resp.content), resp.status_code)
-    return resp.url
-
 
 
 def _is_tool_completion_item(item: Any) -> bool:
@@ -386,15 +364,12 @@ async def show_html(
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
     html_url = _save_html_file(html, email)
-    logger.info("show_html: about to screenshot %s", html_url)
-    screenshot_url = _screenshot_url(html_url)
-    logger.info("show_html: screenshot result = %s", screenshot_url)
-    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
+    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
-        arguments={"html": html, "screenshot_url": screenshot_url},
+        arguments={"html": html, "html_url": html_url},
     )
-    return {"html_url": html_url, "screenshot_url": screenshot_url}
+    return {"html_url": html_url}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
