@@ -180,7 +180,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         thread: ThreadMetadata,
         item: UserMessageItem | None,
         context: dict[str, Any],
-    ) -> AsyncIterator[ThreadStreamEvent]:
+    ) -> AsyncIterator[Any]:
         agent_context = TraccarAgentContext(
             thread=thread,
             store=self.store,
