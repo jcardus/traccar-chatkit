@@ -107,7 +107,7 @@ def _screenshot_url(url: str) -> str:
     logger.info("Taking screenshot of %s", url)
     resp = requests.get(
         "https://api.microlink.io",
-        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "10000"},
+        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitForTimeout": "15000"},
         timeout=30,
     )
     resp.raise_for_status()
