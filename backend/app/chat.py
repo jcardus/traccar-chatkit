@@ -394,7 +394,7 @@ async def show_html(
             },
         },
     )
-    return {"html_url": html_url}
+    return {"result": "success"}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
