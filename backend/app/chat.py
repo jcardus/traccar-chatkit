@@ -187,7 +187,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             request_context=context,
         )
 
-        target_item: ThreadItem | None = item
+        target_item = item
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 
@@ -232,7 +232,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
 
     async def _latest_thread_item(
         self, thread: ThreadMetadata, context: dict[str, Any]
-    ) -> ThreadItem | None:
+    ) -> Any | None:
         try:
             items = await self.store.load_thread_items(thread.id, None, 1, "desc", context)
         except Exception:  # pragma: no cover - defensive
@@ -243,7 +243,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     async def _to_agent_input(
         self,
         thread: ThreadMetadata,
-        item: ThreadItem,
+        item: Any,
     ) -> Any | None:
         if _is_tool_completion_item(item):
             return None
@@ -251,6 +251,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         converter = getattr(self, "_thread_item_converter", None)
         if converter is not None:
             for attr in (
+                "to_agent_input",
                 "to_input_item",
                 "convert",
                 "convert_item",
