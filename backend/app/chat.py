@@ -360,17 +360,16 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
 async def show_html(
     ctx: RunContextWrapper[TraccarAgentContext], html: str
 ) -> dict[str, str]:
-    logger.info("TOOL: show_html")
-    js_error = _validate_js_syntax(html)
-    if js_error:
-        logger.warning("JS validation failed: %s", js_error)
-        return {"error": js_error}
-    email = _get_user_email_from_traccar(ctx.context.request_context)
-    html_url = _save_html_file(html, email)
-    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-
-    attachment_arg: str | None = None
     try:
+        logger.info("TOOL: show_html")
+        js_error = _validate_js_syntax(html)
+        if js_error:
+            logger.warning("JS validation failed: %s", js_error)
+            return {"error": js_error}
+        email = _get_user_email_from_traccar(ctx.context.request_context)
+        html_url = _save_html_file(html, email)
+        await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
+
         screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
         attachment_id = _gen_id("att")
         attachment = ImageAttachment(
@@ -381,25 +380,25 @@ async def show_html(
         )
         await ctx.context.store.save_attachment(attachment, ctx.context.request_context)
         logger.info("Saved screenshot attachment %s for %s", attachment_id, html_url)
-        attachment_arg = json.dumps({
-            "id": attachment_id,
-            "type": "image",
-            "name": "screenshot.png",
-            "mime_type": "image/png",
-            "preview_url": screenshot_url,
-        })
+
+        ctx.context.client_tool_call = ClientToolCall(
+            name="show_html",
+            arguments={
+                "html": html,
+                "html_url": html_url,
+                "attachment": json.dumps({
+                    "id": attachment_id,
+                    "type": "image",
+                    "name": "screenshot.png",
+                    "mime_type": "image/png",
+                    "preview_url": screenshot_url,
+                }),
+            },
+        )
+        return {"result": "success"}
     except Exception:
-        logger.exception("Failed to create screenshot attachment")
-
-    arguments = {"html": html, "html_url": html_url}
-    if attachment_arg:
-        arguments["attachment"] = attachment_arg
-
-    ctx.context.client_tool_call = ClientToolCall(
-        name="show_html",
-        arguments=arguments,
-    )
-    return {"result": "success"}
+        logger.exception("show_html failed")
+        return {"error": "Internal error rendering HTML"}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
