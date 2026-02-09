@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import re
 import subprocess
@@ -326,7 +327,6 @@ async def invoke_api(
         path: str,
         body: str,
 ):
-    import json
     result = invoke(
         method,
         path,
@@ -369,30 +369,35 @@ async def show_html(
     html_url = _save_html_file(html, email)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
 
-    screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
-    attachment_id = _gen_id("att")
-    attachment = ImageAttachment(
-        id=attachment_id,
-        name="screenshot.png",
-        mime_type="image/png",
-        preview_url=AnyUrl(screenshot_url),
-    )
-    await ctx.context.store.save_attachment(attachment, ctx.context.request_context)
-    logger.info("Saved screenshot attachment %s for %s", attachment_id, html_url)
+    attachment_arg: str | None = None
+    try:
+        screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
+        attachment_id = _gen_id("att")
+        attachment = ImageAttachment(
+            id=attachment_id,
+            name="screenshot.png",
+            mime_type="image/png",
+            preview_url=AnyUrl(screenshot_url),
+        )
+        await ctx.context.store.save_attachment(attachment, ctx.context.request_context)
+        logger.info("Saved screenshot attachment %s for %s", attachment_id, html_url)
+        attachment_arg = json.dumps({
+            "id": attachment_id,
+            "type": "image",
+            "name": "screenshot.png",
+            "mime_type": "image/png",
+            "preview_url": screenshot_url,
+        })
+    except Exception:
+        logger.exception("Failed to create screenshot attachment")
+
+    arguments = {"html": html, "html_url": html_url}
+    if attachment_arg:
+        arguments["attachment"] = attachment_arg
 
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
-        arguments={
-            "html": html,
-            "html_url": html_url,
-            "attachment": {
-                "id": attachment_id,
-                "type": "image",
-                "name": "screenshot.png",
-                "mime_type": "image/png",
-                "preview_url": screenshot_url,
-            },
-        },
+        arguments=arguments,
     )
     return {"result": "success"}
 

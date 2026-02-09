@@ -45,7 +45,13 @@ export function ChatKitPanel({
         return { success: true };
       } else if (invocation.name === "show_html") {
         onShowHtml(invocation);
-        const attachment = invocation.params?.attachment;
+        let attachment;
+        try {
+          const raw = invocation.params?.attachment;
+          attachment = typeof raw === "string" ? JSON.parse(raw) : raw;
+        } catch (e) {
+          console.error("Failed to parse attachment:", e);
+        }
         if (attachment) {
           const send = async () => {
             try {
