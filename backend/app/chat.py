@@ -86,8 +86,8 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-async def _save_html(html: str, email: str, store: NeonStore, thread_id: str) -> str:
-    """Save HTML to a file, persist the URL in the database, and return the public URL."""
+def _save_html_file(html: str, email: str) -> str:
+    """Save HTML to a file and return the public URL (no DB write)."""
     REPORTS_DIR.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,7 +99,6 @@ async def _save_html(html: str, email: str, store: NeonStore, thread_id: str) ->
 
     url = f"https://chat.frotaweb.com/chatkit/{filename}"
     logger.info("Saved HTML: %s", url)
-    await store.save_html_report(email, thread_id, url)
     return url
 
 
@@ -159,7 +158,6 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         tools = [
             invoke_api,
             show_html,
-            render_html,
             get_openapi_yaml,
         ]
         self.assistant = Agent[TraccarAgentContext](
@@ -370,27 +368,14 @@ async def show_html(
         logger.warning("JS validation failed: %s", js_error)
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
-    await _save_html(html, email, ctx.context.store, ctx.context.thread.id)
+    html_url = await _save_html_file(html, email)
+    screenshot = _screenshot_url(html_url)
+    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
     )
-    logger.info("TOOL: show_html -> success")
-    return {"result": "success"}
-
-@function_tool(description_override="Render HTML in a headless browser and return a screenshot URL. Use this to verify that generated HTML looks correct.")
-async def render_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
-    logger.info("TOOL: render_html")
-    js_error = _validate_js_syntax(html)
-    if js_error:
-        return {"error": js_error}
-    try:
-        email = _get_user_email_from_traccar(ctx.context.request_context)
-        html_url = await _save_html(html, email, ctx.context.store, ctx.context.thread.id)
-        screenshot = _screenshot_url(html_url)
-        return {"screenshot_url": screenshot}
-    except Exception as e:
-        return {"error": str(e)}
+    return {"screenshot_url": screenshot}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(

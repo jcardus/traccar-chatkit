@@ -89,12 +89,16 @@ class NeonStore(Store[dict[str, Any]]):
                     user_id TEXT,
                     thread_id TEXT,
                     url TEXT NOT NULL,
+                    image_url TEXT,
                     created_at TIMESTAMPTZ NOT NULL
                 )
             """)
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_html_reports_user_id
                 ON html_reports(user_id)
+            """)
+            await conn.execute("""
+                ALTER TABLE html_reports ADD COLUMN IF NOT EXISTS image_url TEXT
             """)
         self._initialized = True
 
@@ -316,17 +320,17 @@ class NeonStore(Store[dict[str, Any]]):
             await conn.execute("DELETE FROM thread_items WHERE id = %s", (item_id,))
 
     # -- HTML reports ----------------------------------------------------
-    async def save_html_report(self, user_id: str | None, thread_id: str, url: str) -> None:
+    async def save_html_report(self, user_id: str | None, thread_id: str, url: str, image_url: str | None = None) -> None:
         await self._ensure_schema()
         pool = await _get_pool()
         report_id = uuid4().hex
         async with pool.connection() as conn:
             await conn.execute(
                 """
-                INSERT INTO html_reports (id, user_id, thread_id, url, created_at)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO html_reports (id, user_id, thread_id, url, image_url, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (report_id, user_id, thread_id, url, datetime.now(timezone.utc)),
+                (report_id, user_id, thread_id, url, image_url, datetime.now(timezone.utc)),
             )
 
     # -- Files -----------------------------------------------------------
