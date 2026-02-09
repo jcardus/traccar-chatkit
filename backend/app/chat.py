@@ -374,7 +374,13 @@ async def show_html(
 
         screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
         # Fire-and-forget: warm the microlink cache so next fetch is instant
-        asyncio.create_task(asyncio.to_thread(requests.get, screenshot_url, timeout=30))
+        async def _warm_cache(url: str) -> None:
+            try:
+                await asyncio.to_thread(requests.get, url, timeout=30)
+                logger.info("Microlink cache warmed: %s", url)
+            except Exception as e:
+                logger.warning("Microlink cache warm failed: %s", e)
+        asyncio.create_task(_warm_cache(screenshot_url))
         attachment_id = _gen_id("att")
         attachment = ImageAttachment(
             id=attachment_id,

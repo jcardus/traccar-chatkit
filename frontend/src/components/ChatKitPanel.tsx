@@ -56,7 +56,6 @@ export function ChatKitPanel({
           const send = async () => {
             try {
               await chatkit.sendUserMessage({
-                text: "Here is a screenshot of the rendered HTML.",
                 attachments: [
                   {
                     id: attachment.id,
