@@ -368,7 +368,7 @@ async def show_html(
         logger.warning("JS validation failed: %s", js_error)
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
-    html_url = await _save_html_file(html, email)
+    html_url = _save_html_file(html, email)
     screenshot = _screenshot_url(html_url)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot)
     ctx.context.client_tool_call = ClientToolCall(
