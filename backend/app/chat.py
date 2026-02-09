@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 import re
@@ -202,33 +201,12 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         previous_response_id = metadata.get("previous_response_id")
         agent_context.previous_response_id = previous_response_id
 
-        # When a client tool call completes, take the screenshot and show it to the model
         if _is_tool_completion_item(target_item):
-            pending_html_url = metadata.pop("pending_html_url", None)
-            pending_html_email = metadata.pop("pending_html_email", None)
-            if not pending_html_url:
-                return
-            logger.info("Tool completion — taking screenshot of %s", pending_html_url)
-            screenshot_url = await asyncio.to_thread(_screenshot_url, pending_html_url)
-            if not screenshot_url:
-                logger.warning("Screenshot failed, skipping model verification")
-                return
-            await self.store.save_html_report(pending_html_email, thread.id, pending_html_url, screenshot_url)
-            agent_input = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_image", "image_url": screenshot_url},
-                        {"type": "input_text", "text": "This is the screenshot of the HTML you just rendered. If it looks broken or blank, briefly tell the user and offer to fix it. Otherwise say nothing about it."},
-                    ],
-                }
-            ]
-            thread.metadata = metadata
-            await self.store.save_thread(thread, context)
-        else:
-            agent_input = await self._to_agent_input(thread, target_item)
-            if agent_input is None:
-                return
+            return
+
+        agent_input = await self._to_agent_input(thread, target_item)
+        if agent_input is None:
+            return
 
         result = Runner.run_streamed(
             self.assistant,
@@ -408,19 +386,13 @@ async def show_html(
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
     html_url = _save_html_file(html, email)
-    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-    # Store the html_url so we can screenshot it when the client tool completes
-    thread = ctx.context.thread
-    metadata = dict(getattr(thread, "metadata", {}) or {})
-    metadata["pending_html_url"] = html_url
-    metadata["pending_html_email"] = email
-    thread.metadata = metadata
-    await ctx.context.store.save_thread(thread, ctx.context.request_context)
+    screenshot_url = _screenshot_url(html_url)
+    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
-        arguments={"html": html},
+        arguments={"html": html, "screenshot_url": screenshot_url},
     )
-    return {"html_url": html_url}
+    return {"html_url": html_url, "screenshot_url": screenshot_url}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
