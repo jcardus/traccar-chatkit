@@ -372,7 +372,7 @@ async def show_html(
         html_url = _save_html_file(html, email)
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
 
-        screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
+        screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=15000"
         # Fire-and-forget: warm the microlink cache so next fetch is instant
         async def _warm_cache(url: str) -> None:
             try:
