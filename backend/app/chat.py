@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import re
@@ -91,7 +92,8 @@ def _save_html_file(html: str, email: str) -> str:
     REPORTS_DIR.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"html_{timestamp}_{email}.html"
+    safe_email = re.sub(r"[^a-zA-Z0-9._-]", "_", email or "unknown")
+    filename = f"html_{timestamp}_{safe_email}.html"
     file_path = REPORTS_DIR / filename
 
     with open(file_path, "w", encoding="utf-8") as f:
@@ -120,6 +122,28 @@ def _screenshot_url(url: str) -> str | None:
         return None
     logger.info("Screenshot ready: %s (%d bytes, status %d)", resp.url, len(resp.content), resp.status_code)
     return resp.url
+
+
+async def _take_screenshot_bg(
+    html_url: str,
+    email: str | None,
+    store: NeonStore,
+    thread: ThreadMetadata,
+    request_context: dict[str, Any],
+) -> None:
+    """Take a screenshot in the background and save it to the DB + thread metadata."""
+    try:
+        screenshot_url = await asyncio.to_thread(_screenshot_url, html_url)
+        if not screenshot_url:
+            return
+        await store.save_html_report(email, thread.id, html_url, screenshot_url)
+        metadata = dict(getattr(thread, "metadata", {}) or {})
+        metadata["pending_screenshot"] = screenshot_url
+        thread.metadata = metadata
+        await store.save_thread(thread, request_context)
+        logger.info("Background screenshot saved: %s", screenshot_url)
+    except Exception:
+        logger.exception("Background screenshot failed for %s", html_url)
 
 
 def _is_tool_completion_item(item: Any) -> bool:
@@ -397,20 +421,16 @@ async def show_html(
         return {"error": js_error}
     email = _get_user_email_from_traccar(ctx.context.request_context)
     html_url = _save_html_file(html, email)
-    screenshot_url = _screenshot_url(html_url)
-    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
-    # Store for the next turn so the model can see the rendered result
-    if screenshot_url:
-        thread = ctx.context.thread
-        metadata = dict(getattr(thread, "metadata", {}) or {})
-        metadata["pending_screenshot"] = screenshot_url
-        thread.metadata = metadata
-        await ctx.context.store.save_thread(thread, ctx.context.request_context)
+    await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
+    # Take a screenshot in the background so the tool returns immediately
+    asyncio.create_task(_take_screenshot_bg(
+        html_url, email, ctx.context.store, ctx.context.thread, ctx.context.request_context,
+    ))
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
     )
-    return {"screenshot_url": screenshot_url}
+    return {"html_url": html_url}
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(
