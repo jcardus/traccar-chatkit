@@ -106,7 +106,7 @@ def _screenshot_url(url: str) -> str:
     """Take a screenshot of a URL via microlink and return the image URL."""
     resp = requests.get(
         "https://api.microlink.io",
-        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitUntil": "networkidle0"},
+        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitUntil": "networkidle0", "screenshot.delay": 3},
         timeout=30,
     )
     resp.raise_for_status()
@@ -140,7 +140,6 @@ class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     store: Annotated[NeonStore, Field(exclude=True)]
     request_context: dict[str, Any]
-    screenshot_url: str | None = None
 
 
 def _user_message_text(item: UserMessageItem) -> str:
@@ -182,16 +181,34 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 
-        if target_item is None or _is_tool_completion_item(target_item):
-            return
-
-        agent_input = await self._to_agent_input(thread, target_item)
-        if agent_input is None:
+        if target_item is None:
             return
 
         metadata = dict(getattr(thread, "metadata", {}) or {})
         previous_response_id = metadata.get("previous_response_id")
         agent_context.previous_response_id = previous_response_id
+
+        # When a client tool call completes, check for a pending screenshot
+        if _is_tool_completion_item(target_item):
+            pending_screenshot = metadata.pop("pending_screenshot", None)
+            if not pending_screenshot:
+                return
+            logger.info("Tool completion with pending screenshot: %s", pending_screenshot)
+            agent_input = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_image", "image_url": pending_screenshot},
+                        {"type": "input_text", "text": "This is the screenshot of the HTML you just rendered. If it looks broken or blank, briefly tell the user and offer to fix it. Otherwise say nothing about it."},
+                    ],
+                }
+            ]
+            thread.metadata = metadata
+            await self.store.save_thread(thread, context)
+        else:
+            agent_input = await self._to_agent_input(thread, target_item)
+            if agent_input is None:
+                return
 
         result = Runner.run_streamed(
             self.assistant,
@@ -203,30 +220,6 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             yield event
 
         response_identifier = getattr(result, "last_response_id", None)
-
-        # If a screenshot was captured, run the model again with the image
-        if agent_context.screenshot_url:
-            logger.info("Follow-up with screenshot: %s", agent_context.screenshot_url)
-            image_input = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": "Here is the screenshot of the HTML you just rendered. Check if it looks correct and tell the user if you notice any issues."},
-                        {"type": "input_image", "image_url": agent_context.screenshot_url},
-                    ],
-                }
-            ]
-            agent_context.screenshot_url = None
-            followup = Runner.run_streamed(
-                self.assistant,
-                image_input,
-                context=agent_context,
-                previous_response_id=response_identifier,
-            )
-            async for event in stream_agent_response(agent_context, followup):
-                yield event
-            response_identifier = getattr(followup, "last_response_id", None)
-
         if response_identifier is not None:
             metadata["previous_response_id"] = response_identifier
             thread.metadata = metadata
@@ -397,7 +390,12 @@ async def show_html(
     html_url = _save_html_file(html, email)
     screenshot_url = _screenshot_url(html_url)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url, screenshot_url)
-    ctx.context.screenshot_url = screenshot_url
+    # Store for next turn so the model can see the rendered result
+    thread = ctx.context.thread
+    metadata = dict(getattr(thread, "metadata", {}) or {})
+    metadata["pending_screenshot"] = screenshot_url
+    thread.metadata = metadata
+    await ctx.context.store.save_thread(thread, ctx.context.request_context)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
