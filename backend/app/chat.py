@@ -106,7 +106,7 @@ def _screenshot_url(url: str) -> str:
     """Take a screenshot of a URL via microlink and return the image URL."""
     resp = requests.get(
         "https://api.microlink.io",
-        params={"url": url, "screenshot": "true", "embed": "screenshot.url"},
+        params={"url": url, "screenshot": "true", "embed": "screenshot.url", "waitUntil": "networkidle0"},
         timeout=30,
     )
     resp.raise_for_status()
