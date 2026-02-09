@@ -45,15 +45,20 @@ export function ChatKitPanel({
         return { success: true };
       } else if (invocation.name === "show_html") {
         onShowHtml(invocation);
-        const htmlUrl = invocation.params?.html_url;
-        if (htmlUrl) {
-          const screenshotUrl = `https://api.microlink.io?url=${encodeURIComponent(htmlUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=10000`;
+        const attachment = invocation.params?.attachment;
+        if (attachment) {
           const send = async () => {
             try {
               await chatkit.sendUserMessage({
-                content: [
-                  { type: "input_image", image_url: screenshotUrl },
-                  { type: "input_text", text: "This is the screenshot of the HTML you just rendered. If it looks broken or blank, briefly tell the user and offer to fix it. Otherwise say nothing about it." },
+                text: "Here is a screenshot of the rendered HTML.",
+                attachments: [
+                  {
+                    id: attachment.id,
+                    type: attachment.type,
+                    name: attachment.name,
+                    mime_type: attachment.mime_type,
+                    preview_url: attachment.preview_url,
+                  },
                 ],
               });
             } catch (e) {

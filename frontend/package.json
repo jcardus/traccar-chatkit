@@ -16,7 +16,7 @@
     "npm": ">=9"
   },
   "dependencies": {
-    "@openai/chatkit-react": "^0",
+    "@openai/chatkit-react": "^1.4.3",
     "@turf/bbox": "^7.2.0",
     "lucide-react": "^0.544.0",
     "maplibre-gl": "^5.9.0",

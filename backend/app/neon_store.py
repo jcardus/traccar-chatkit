@@ -13,7 +13,9 @@ from chatkit.types import (
     Attachment,
     ClientToolCallItem,
     EndOfTurnItem,
+    FileAttachment,
     HiddenContextItem,
+    ImageAttachment,
     Page,
     TaskItem,
     ThreadItem,
@@ -99,6 +101,16 @@ class NeonStore(Store[dict[str, Any]]):
             """)
             await conn.execute("""
                 ALTER TABLE html_reports ADD COLUMN IF NOT EXISTS image_url TEXT
+            """)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS attachments (
+                    id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    preview_url TEXT,
+                    created_at TIMESTAMPTZ NOT NULL
+                )
             """)
         self._initialized = True
 
@@ -339,22 +351,54 @@ class NeonStore(Store[dict[str, Any]]):
         attachment: Attachment,
         context: dict[str, Any],
     ) -> None:
-        raise NotImplementedError(
-            "NeonStore does not persist attachments. Provide a Store implementation "
-            "that enforces authentication and authorization before enabling uploads."
-        )
+        await self._ensure_schema()
+        pool = await _get_pool()
+        preview_url = getattr(attachment, "preview_url", None)
+        async with pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO attachments (id, type, name, mime_type, preview_url, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    type = EXCLUDED.type,
+                    name = EXCLUDED.name,
+                    mime_type = EXCLUDED.mime_type,
+                    preview_url = EXCLUDED.preview_url
+                """,
+                (
+                    attachment.id,
+                    attachment.type,
+                    attachment.name,
+                    attachment.mime_type,
+                    str(preview_url) if preview_url else None,
+                    datetime.now(timezone.utc),
+                ),
+            )
 
     async def load_attachment(
         self,
         attachment_id: str,
         context: dict[str, Any],
     ) -> Attachment:
-        raise NotImplementedError(
-            "NeonStore does not load attachments. Provide a Store implementation "
-            "that enforces authentication and authorization before enabling uploads."
-        )
+        await self._ensure_schema()
+        pool = await _get_pool()
+        async with pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT id, type, name, mime_type, preview_url FROM attachments WHERE id = %s",
+                (attachment_id,),
+            )
+            row = await cur.fetchone()
+            if not row:
+                raise NotFoundError(f"Attachment {attachment_id} not found")
+            att_id, att_type, name, mime_type, preview_url = row
+            if att_type == "image":
+                return ImageAttachment(
+                    id=att_id, name=name, mime_type=mime_type, preview_url=preview_url
+                )
+            return FileAttachment(id=att_id, name=name, mime_type=mime_type)
 
     async def delete_attachment(self, attachment_id: str, context: dict[str, Any]) -> None:
-        raise NotImplementedError(
-            "NeonStore does not delete attachments because they are never stored."
-        )
+        await self._ensure_schema()
+        pool = await _get_pool()
+        async with pool.connection() as conn:
+            await conn.execute("DELETE FROM attachments WHERE id = %s", (attachment_id,))

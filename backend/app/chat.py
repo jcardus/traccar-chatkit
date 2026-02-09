@@ -21,15 +21,18 @@ from chatkit.agents import (
 )
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
 from chatkit.types import (
+    Attachment,
     ClientToolCallItem,
     HiddenContextItem,
+    ImageAttachment,
     ThreadItem,
     ThreadMetadata,
     ThreadStreamEvent,
     UserMessageItem,
 )
 from openai.types.responses import ResponseInputContentParam
-from pydantic import ConfigDict, Field
+from openai.types.responses.response_input_image_param import ResponseInputImageParam
+from pydantic import AnyUrl, ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
@@ -125,6 +128,21 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
     return ThreadItemDoneEvent(item=item)
 
 
+class TraccarThreadItemConverter(ThreadItemConverter):
+    """Converts image attachments to input_image content for the model."""
+
+    async def attachment_to_message_content(
+        self, attachment: Attachment
+    ) -> ResponseInputContentParam:
+        if isinstance(attachment, ImageAttachment):
+            return ResponseInputImageParam(
+                type="input_image",
+                image_url=str(attachment.preview_url),
+                detail="low",
+            )
+        raise NotImplementedError(f"Unsupported attachment type: {attachment.type}")
+
+
 class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     store: Annotated[NeonStore, Field(exclude=True)]
@@ -207,22 +225,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         raise RuntimeError("File attachments are not supported in this demo.")
 
     def _init_thread_item_converter(self) -> Any | None:
-        converter_cls = ThreadItemConverter
-        if converter_cls is None or not callable(converter_cls):
-            return None
-
-        attempts: tuple[dict[str, Any], ...] = (
-            {"to_message_content": self.to_message_content},
-            {"message_content_converter": self.to_message_content},
-            {},
-        )
-
-        for kwargs in attempts:
-            try:
-                return converter_cls(**kwargs)
-            except TypeError:
-                continue
-        return None
+        return TraccarThreadItemConverter()
 
     async def _latest_thread_item(
         self, thread: ThreadMetadata, context: dict[str, Any]
@@ -365,9 +368,31 @@ async def show_html(
     email = _get_user_email_from_traccar(ctx.context.request_context)
     html_url = _save_html_file(html, email)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
+
+    screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=10000"
+    attachment_id = _gen_id("att")
+    attachment = ImageAttachment(
+        id=attachment_id,
+        name="screenshot.png",
+        mime_type="image/png",
+        preview_url=AnyUrl(screenshot_url),
+    )
+    await ctx.context.store.save_attachment(attachment, ctx.context.request_context)
+    logger.info("Saved screenshot attachment %s for %s", attachment_id, html_url)
+
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
-        arguments={"html": html, "html_url": html_url},
+        arguments={
+            "html": html,
+            "html_url": html_url,
+            "attachment": {
+                "id": attachment_id,
+                "type": "image",
+                "name": "screenshot.png",
+                "mime_type": "image/png",
+                "preview_url": screenshot_url,
+            },
+        },
     )
     return {"html_url": html_url}
 
