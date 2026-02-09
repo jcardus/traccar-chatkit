@@ -124,27 +124,6 @@ def _screenshot_url(url: str) -> str | None:
     return resp.url
 
 
-async def _take_screenshot_bg(
-    html_url: str,
-    email: str | None,
-    store: NeonStore,
-    thread: ThreadMetadata,
-    request_context: dict[str, Any],
-) -> None:
-    """Take a screenshot in the background and save it to the DB + thread metadata."""
-    try:
-        screenshot_url = await asyncio.to_thread(_screenshot_url, html_url)
-        if not screenshot_url:
-            return
-        await store.save_html_report(email, thread.id, html_url, screenshot_url)
-        metadata = dict(getattr(thread, "metadata", {}) or {})
-        metadata["pending_screenshot"] = screenshot_url
-        thread.metadata = metadata
-        await store.save_thread(thread, request_context)
-        logger.info("Background screenshot saved: %s", screenshot_url)
-    except Exception:
-        logger.exception("Background screenshot failed for %s", html_url)
-
 
 def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
@@ -221,17 +200,23 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         previous_response_id = metadata.get("previous_response_id")
         agent_context.previous_response_id = previous_response_id
 
-        # When a client tool call completes, check for a pending screenshot
+        # When a client tool call completes, take the screenshot and show it to the model
         if _is_tool_completion_item(target_item):
-            pending_screenshot = metadata.pop("pending_screenshot", None)
-            if not pending_screenshot:
+            pending_html_url = metadata.pop("pending_html_url", None)
+            pending_html_email = metadata.pop("pending_html_email", None)
+            if not pending_html_url:
                 return
-            logger.info("Tool completion with pending screenshot: %s", pending_screenshot)
+            logger.info("Tool completion — taking screenshot of %s", pending_html_url)
+            screenshot_url = await asyncio.to_thread(_screenshot_url, pending_html_url)
+            if not screenshot_url:
+                logger.warning("Screenshot failed, skipping model verification")
+                return
+            await self.store.save_html_report(pending_html_email, thread.id, pending_html_url, screenshot_url)
             agent_input = [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "input_image", "image_url": pending_screenshot},
+                        {"type": "input_image", "image_url": screenshot_url},
                         {"type": "input_text", "text": "This is the screenshot of the HTML you just rendered. If it looks broken or blank, briefly tell the user and offer to fix it. Otherwise say nothing about it."},
                     ],
                 }
@@ -422,10 +407,13 @@ async def show_html(
     email = _get_user_email_from_traccar(ctx.context.request_context)
     html_url = _save_html_file(html, email)
     await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-    # Take a screenshot in the background so the tool returns immediately
-    asyncio.create_task(_take_screenshot_bg(
-        html_url, email, ctx.context.store, ctx.context.thread, ctx.context.request_context,
-    ))
+    # Store the html_url so we can screenshot it when the client tool completes
+    thread = ctx.context.thread
+    metadata = dict(getattr(thread, "metadata", {}) or {})
+    metadata["pending_html_url"] = html_url
+    metadata["pending_html_email"] = email
+    thread.metadata = metadata
+    await ctx.context.store.save_thread(thread, ctx.context.request_context)
     ctx.context.client_tool_call = ClientToolCall(
         name="show_html",
         arguments={"html": html},
