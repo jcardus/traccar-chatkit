@@ -36,7 +36,7 @@ from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
 from .traccar import invoke
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
