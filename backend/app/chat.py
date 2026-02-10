@@ -28,9 +28,7 @@ from chatkit.types import (
     ClientToolCallItem,
     HiddenContextItem,
     ImageAttachment,
-    ThreadItem,
     ThreadMetadata,
-    ThreadStreamEvent,
     UserMessageItem,
 )
 from openai.types.responses import ResponseInputContentParam
@@ -39,7 +37,7 @@ from pydantic import AnyUrl, ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
-from .traccar import invoke
+from .traccar import invoke, _get_session_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -91,8 +89,14 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-def _save_html_file(html: str, email: str) -> str:
-    """Save HTML to a file and return the public URL (no DB write)."""
+def _save_html_file(html: str, email: str, cookie: str | None = None) -> str:
+    """Save HTML to a file and return the public URL (no DB write).
+
+    When *session* is provided it is embedded as a subdomain so the server
+    can recover the session from the hostname on later requests made by
+    the rendered page, e.g.
+        https://{session}.chat.frotaweb.com/chatkit/{filename}
+    """
     REPORTS_DIR.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -103,7 +107,12 @@ def _save_html_file(html: str, email: str) -> str:
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    url = f"https://chat.frotaweb.com/chatkit/{filename}"
+    # Insert session as a subdomain: https://host -> https://{session}.host
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse("https://rastreon.net")
+    parsed = parsed._replace(netloc=f"{cookie}.{parsed.netloc}")
+    base_url = urlunparse(parsed)
+    url = f"{base_url}/chatkit/{filename}"
     logger.info("Saved HTML: %s", url)
     return url
 
@@ -370,11 +379,11 @@ async def show_html(
             logger.warning("JS validation failed: %s", js_error)
             return {"error": js_error}
         email = _get_user_email_from_traccar(ctx.context.request_context)
-        html_url = _save_html_file(html, email)
+        session = _get_session_id(ctx.context.request_context.get("request"))
+        html_url = _save_html_file(html, email, session)
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-
         screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=15000"
-        # Fire-and-forget: warm the microlink cache so next fetch is instant
+        # Fire-and-forget: warm the microlink cache so the next fetch is instant
         async def _warm_cache(url: str) -> None:
             try:
                 await asyncio.to_thread(requests.get, url, timeout=30)

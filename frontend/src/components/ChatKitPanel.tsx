@@ -71,7 +71,7 @@ export function ChatKitPanel({
               setTimeout(send, 5000);
             }
           };
-          send();
+          setTimeout(send, 15000);
         }
         return { success: true };
       }
