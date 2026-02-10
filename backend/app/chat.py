@@ -381,15 +381,25 @@ async def show_html(
         session = _get_session_id(ctx.context.request_context.get("request"))
         html_url = _save_html_file(html, email, session)
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-        screenshot_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=15000"
-        # Fire-and-forget: warm the microlink cache so the next fetch is instant
-        async def _warm_cache(url: str) -> None:
+        # Take screenshot via microlink and save locally
+        microlink_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=15000"
+        screenshot_filename = html_url.rsplit("/", 1)[-1].replace(".html", ".png")
+        screenshot_path = REPORTS_DIR / screenshot_filename
+        screenshot_url = html_url.replace(".html", ".png")
+
+        async def _download_screenshot() -> None:
             try:
-                await asyncio.to_thread(requests.get, url, timeout=30)
-                logger.info("Microlink cache warmed: %s", url)
+                resp = await asyncio.to_thread(requests.get, microlink_url, timeout=60)
+                if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image/"):
+                    with open(screenshot_path, "wb") as f:
+                        f.write(resp.content)
+                    logger.info("Screenshot saved: %s", screenshot_path)
+                else:
+                    logger.warning("Microlink returned %s (%s)", resp.status_code, resp.headers.get("content-type"))
             except Exception as e:
-                logger.warning("Microlink cache warm failed: %s", e)
-        asyncio.create_task(_warm_cache(screenshot_url))
+                logger.warning("Screenshot download failed: %s", e)
+        asyncio.create_task(_download_screenshot())
+
         attachment_id = _gen_id("att")
         attachment = ImageAttachment(
             id=attachment_id,
