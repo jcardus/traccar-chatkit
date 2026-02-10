@@ -389,6 +389,7 @@ async def show_html(
 
         async def _download_screenshot() -> None:
             try:
+                logger.info(microlink_url)
                 resp = await asyncio.to_thread(requests.get, microlink_url, timeout=60)
                 if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image/"):
                     with open(screenshot_path, "wb") as f:

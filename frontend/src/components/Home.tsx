@@ -2,16 +2,13 @@ import clsx from "clsx";
 import { useState } from "react";
 
 import { ChatKitPanel } from "./ChatKitPanel";
-import { ThemeToggle } from "./ThemeToggle";
 import { ColorScheme } from "../hooks/useColorScheme";
 import Map from "./Map";
 
 export default function Home({
   scheme,
-  handleThemeChange,
 }: {
   scheme: ColorScheme;
-  handleThemeChange: (scheme: ColorScheme) => void;
 }) {
   const [mapData, setMapData] = useState(null );
   const [showMap, setShowMap] = useState(true);
@@ -52,27 +49,28 @@ export default function Home({
         items-stretch overflow-hidden
         bg-white/80 shadow-[0_45px_90px_-45px_rgba(15,23,42,0.6)] ring-1 ring-slate-200/60 backdrop-blur
          dark:bg-slate-900/70 dark:shadow-[0_45px_90px_-45px_rgba(15,23,42,0.85)] dark:ring-slate-800/60">
-          <div className="absolute z-40 p-3 flex gap-2">
-            <ThemeToggle value={scheme} onChange={handleThemeChange}  />
+          <div className="w-2/3 h-full">
+            {showMap && <Map data={mapData}></Map>}
+            {showHtml && htmlContent && (
+              <div className="w-full h-full p-0 m-0 bg-white">
+                  <iframe
+                      srcDoc={htmlContent}
+                      style={{
+                          height: "100%",
+                          width: "100%",
+                          border: "none",
+                      }}
+                  />
+              </div>
+            )}
           </div>
-          <ChatKitPanel
-              theme={scheme}
-              onShowMap={onShowMap}
-              onShowHtml={onShowHtml}
-          />
-          {showMap && <Map data={mapData}></Map>}
-          {showHtml && htmlContent && (
-            <div className="w-full h-full p-0 m-0 bg-white">
-                <iframe
-                    srcDoc={htmlContent}
-                    style={{
-                        height: "100%",
-                        width: "100%",
-                        border: "none",
-                    }}
-                />
-            </div>
-          )}
+          <div className="w-1/3 h-full">
+            <ChatKitPanel
+                theme={scheme}
+                onShowMap={onShowMap}
+                onShowHtml={onShowHtml}
+            />
+          </div>
         </div>
       </div>
     </div>
