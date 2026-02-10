@@ -68,10 +68,10 @@ export function ChatKitPanel({
               });
             } catch (e) {
               console.error("Failed to send screenshot message:", e);
-              setTimeout(send, 5000);
+              setTimeout(send, 1000);
             }
           };
-          setTimeout(send, 15000);
+          setTimeout(send, 20000);
         }
         return { success: true };
       }
