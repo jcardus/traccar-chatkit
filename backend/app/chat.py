@@ -144,7 +144,7 @@ class TraccarThreadItemConverter(ThreadItemConverter):
     """Converts image attachments to input_image content for the model."""
 
     async def attachment_to_message_content(
-        self, attachment: Attachment
+        self, attachment
     ) -> ResponseInputContentParam:
         if isinstance(attachment, ImageAttachment):
             return ResponseInputImageParam(
