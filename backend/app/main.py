@@ -101,6 +101,8 @@ async def get_file(filename: str) -> Response:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
         return Response(content=content, media_type="text/html")
+    elif filename.endswith(".png"):
+        return FileResponse(path=file_path, media_type="image/png", filename=filename)
     else:
         # Serve JSON files
         return FileResponse(path=file_path, media_type="application/json", filename=filename)
