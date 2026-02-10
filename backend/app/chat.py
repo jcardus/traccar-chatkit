@@ -414,6 +414,7 @@ async def show_html(
                 }),
             },
         )
+        logger.info("show_html success")
         return {"result": "success"}
     except Exception:
         logger.exception("show_html failed")
