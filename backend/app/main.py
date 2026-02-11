@@ -7,6 +7,7 @@ import logging
 import httpx
 from chatkit.server import StreamingResult
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.responses import JSONResponse
 
@@ -20,6 +21,13 @@ from .chat import (
 from .traccar import _get_cookie, _get_traccar_url
 
 app = FastAPI(title="ChatKit API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _chatkit_server: TraccarAssistantServer | None = create_chatkit_server()
 
