@@ -101,13 +101,11 @@ async def get_file(filename: str) -> Response:
     if not file_path.is_relative_to(REPORTS_DIR):
         raise HTTPException(status_code=400, detail="Invalid file path")
 
+    task = screenshot_tasks.pop(filename, None)
+    if task:
+        await task
     if not file_path.exists():
-        # If a screenshot is still being generated, await it
-        task = screenshot_tasks.pop(filename, None)
-        if task:
-            await task
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Report file not found")
+        raise HTTPException(status_code=404, detail="Report file not found")
 
     # Determine media type based on file extension
     if filename.endswith(".html"):
