@@ -19,6 +19,8 @@ def _get_traccar_url(request):
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "https://traccar-eu.joaquim.workers.dev"
+    if origin and "18ttracker.com.br" in origin:
+        return "https://traccar-eu.joaquim.workers.dev"
     return "http://gps.frotaweb.com"
 def _get_session_from_host(request):
     """Extract session from subdomain, e.g. {session}.rastreon.net -> session."""

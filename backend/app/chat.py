@@ -36,7 +36,7 @@ from pydantic import AnyUrl, ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
-from .traccar import invoke, _get_session_id
+from .traccar import invoke, _get_session_id, _get_traccar_url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-def _save_html_file(html: str, email: str, cookie: str | None = None) -> str:
+def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_url: str = "http://gps.frotaweb.com") -> str:
     """Save HTML to a file and return the public URL (no DB write).
 
     When *session* is provided it is embedded as a subdomain so the server
@@ -108,7 +108,11 @@ def _save_html_file(html: str, email: str, cookie: str | None = None) -> str:
 
     # Insert session as a subdomain: https://host -> https://{session}.host
     from urllib.parse import urlparse, urlunparse
-    parsed = urlparse("https://rastreon.net")
+    if "traccar-eu" in traccar_url:
+        base_domain = "https://18ttracker.com.br"
+    else:
+        base_domain = "https://rastreon.net"
+    parsed = urlparse(base_domain)
     parsed = parsed._replace(netloc=f"{cookie}.{parsed.netloc}")
     base_url = urlunparse(parsed)
     url = f"{base_url}/chatkit/{filename}"
@@ -379,7 +383,8 @@ async def show_html(
             return {"error": js_error}
         email = _get_user_email_from_traccar(ctx.context.request_context)
         session = _get_session_id(ctx.context.request_context.get("request"))
-        html_url = _save_html_file(html, email, session)
+        traccar_url = _get_traccar_url(ctx.context.request_context.get("request"))
+        html_url = _save_html_file(html, email, session, traccar_url)
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
         # Take screenshot via microlink and save locally
         microlink_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=15000"
