@@ -12,7 +12,7 @@ type ChatKitPanelProps = {
   onShowHtml: (invocation) => void;
 };
 
-console.log('chatkit 1.0')
+console.log('chatkit 1.1')
 
 export function ChatKitPanel({
   theme,
@@ -93,7 +93,11 @@ export function ChatKitPanel({
             setTimeout(trySend, 500)
           }
         }
-        trySend()
+        if (text) {
+          trySend().then()
+        } else {
+          console.warn('ignoring', event.data)
+        }
       }
     };
     window.addEventListener("message", handleMessage);
