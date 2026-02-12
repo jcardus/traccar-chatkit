@@ -409,7 +409,7 @@ async def show_html(
                 elapsed = time.monotonic() - start
                 logger.warning("Screenshot failed (%.1fs): %s", elapsed, e)
             finally:
-                await screenshot_tasks.pop(screenshot_filename, None)
+                screenshot_tasks.pop(screenshot_filename, None)
         screenshot_tasks[screenshot_filename] = asyncio.create_task(_take_screenshot())
 
         attachment_id = _gen_id("att")
