@@ -12,6 +12,8 @@ type ChatKitPanelProps = {
   onShowHtml: (invocation) => void;
 };
 
+console.log('chatkit 1.0')
+
 export function ChatKitPanel({
   theme,
   onShowMap,
@@ -79,7 +81,6 @@ export function ChatKitPanel({
       return { success: false };
     }
   });
-
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "html-error") {
