@@ -35,7 +35,7 @@ from pydantic import AnyUrl, ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
-from .traccar import invoke, _get_session_id, _get_traccar_url
+from .traccar import invoke, _get_session_id, _get_traccar_url, fleetmap_url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_ur
 
     # Insert session as a subdomain: https://host -> https://{session}.host
     from urllib.parse import urlparse, urlunparse
-    if "traccar-eu" in traccar_url:
+    if traccar_url == fleetmap_url:
         base_domain = "https://i8ttracker.com.br"
     else:
         base_domain = "https://rastreon.net"

@@ -3,6 +3,7 @@ import logging
 import requests
 
 logger = logging.getLogger(__name__)
+fleetmap_url = "https://api.pinme.io"
 
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
@@ -18,7 +19,7 @@ def _get_traccar_url(request):
         "https://plataforma.ubisat.cl"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
-        return "https://api.pinme.io"
+        return fleetmap_url
     hostname = request.headers.get("host", "") if request and hasattr(request, "headers") else ""
     if "i8ttracker.com.br" in hostname:
         return "https://api.pinme.io"
