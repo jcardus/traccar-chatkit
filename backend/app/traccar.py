@@ -19,7 +19,8 @@ def _get_traccar_url(request):
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return "https://traccar-eu.joaquim.workers.dev"
-    if origin and "i8ttracker.com.br" in origin:
+    hostname = request.headers.get("host", "") if request and hasattr(request, "headers") else ""
+    if "i8ttracker.com.br" in hostname:
         return "https://traccar-eu.joaquim.workers.dev"
     return "http://gps.frotaweb.com"
 def _get_session_from_host(request):
