@@ -55,7 +55,7 @@ export function ChatKitPanel({
         if (attachment) {
           const send = async () => {
             try {
-              await fetch(attachment.preview_url)
+              await fetch(attachment.preview_url).catch()
               await chatkit.sendUserMessage({
                 attachments: [
                   {
