@@ -14,7 +14,6 @@ from typing import Annotated, Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
 import boto3
-import requests
 from agents import Agent, RunContextWrapper, Runner, function_tool
 from chatkit.agents import (
     AgentContext,
@@ -386,25 +385,24 @@ async def show_html(
         traccar_url = _get_traccar_url(ctx.context.request_context.get("request"))
         html_url = _save_html_file(html, email, session, traccar_url)
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-        # Take screenshot via microlink and save locally
-        microlink_url = f"https://api.microlink.io?url={html_url}&screenshot=true&embed=screenshot.url&waitForTimeout=15000"
+        # Take screenshot via local Playwright headless Chromium
         screenshot_filename = html_url.rsplit("/", 1)[-1].replace(".html", ".png")
         screenshot_path = REPORTS_DIR / screenshot_filename
         screenshot_url = html_url.replace(".html", ".png")
 
-        async def _download_screenshot() -> None:
+        async def _take_screenshot() -> None:
             try:
-                logger.info(microlink_url)
-                resp = await asyncio.to_thread(requests.get, microlink_url, timeout=60)
-                if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image/"):
-                    with open(screenshot_path, "wb") as f:
-                        f.write(resp.content)
+                from playwright.async_api import async_playwright
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch()
+                    page = await browser.new_page(viewport={"width": 1280, "height": 720})
+                    await page.goto(html_url, wait_until="networkidle")
+                    await page.screenshot(path=str(screenshot_path), full_page=True)
+                    await browser.close()
                     logger.info("Screenshot saved: %s", screenshot_path)
-                else:
-                    logger.warning("Microlink returned %s (%s)", resp.status_code, resp.headers.get("content-type"))
             except Exception as e:
-                logger.warning("Screenshot download failed: %s", e)
-        asyncio.create_task(_download_screenshot())
+                logger.warning("Screenshot failed: %s", e)
+        asyncio.create_task(_take_screenshot())
 
         attachment_id = _gen_id("att")
         attachment = ImageAttachment(
