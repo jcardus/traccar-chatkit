@@ -109,7 +109,7 @@ def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_ur
     # Insert session as a subdomain: https://host -> https://{session}.host
     from urllib.parse import urlparse, urlunparse
     if "traccar-eu" in traccar_url:
-        base_domain = "https://18ttracker.com.br"
+        base_domain = "https://i8ttracker.com.br"
     else:
         base_domain = "https://rastreon.net"
     parsed = urlparse(base_domain)
