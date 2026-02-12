@@ -387,7 +387,7 @@ async def show_html(
         traccar_url = _get_traccar_url(ctx.context.request_context.get("request"))
         html_url = _save_html_file(html, email, session, traccar_url)
         await ctx.context.store.save_html_report(email, ctx.context.thread.id, html_url)
-        # Take screenshot via local Playwright headless Chromium
+        # Take a screenshot via local Playwright headless Chromium
         screenshot_filename = html_url.rsplit("/", 1)[-1].replace(".html", ".png")
         screenshot_path = REPORTS_DIR / screenshot_filename
         screenshot_url = html_url.replace(".html", ".png")
@@ -437,7 +437,7 @@ async def show_html(
             },
         )
         logger.info("show_html success")
-        return {"result": "success"}
+        return {"result": "success", "url": html_url}
     except Exception:
         logger.exception("show_html failed")
         return {"error": "Internal error rendering HTML"}
