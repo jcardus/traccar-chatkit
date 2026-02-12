@@ -101,7 +101,7 @@ async def get_file(filename: str) -> Response:
     if not file_path.is_relative_to(REPORTS_DIR):
         raise HTTPException(status_code=400, detail="Invalid file path")
 
-    task = screenshot_tasks.pop(filename, None)
+    task = screenshot_tasks.get(filename)
     if task:
         await task
     if not file_path.exists():
