@@ -401,7 +401,6 @@ async def show_html(
                     browser = await p.chromium.launch()
                     page = await browser.new_page(viewport={"width": 1280, "height": 720})
                     await page.goto(html_url, wait_until="networkidle", timeout=90000)
-                    #await page.wait_for_timeout(2000)
                     await page.screenshot(path=str(screenshot_path), full_page=True, timeout=120000)
                     await browser.close()
                     elapsed = time.monotonic() - start

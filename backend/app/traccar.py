@@ -18,10 +18,10 @@ def _get_traccar_url(request):
         "https://plataforma.ubisat.cl"
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
-        return "https://traccar-eu.joaquim.workers.dev"
+        return "https://api.pinme.io"
     hostname = request.headers.get("host", "") if request and hasattr(request, "headers") else ""
     if "i8ttracker.com.br" in hostname:
-        return "https://traccar-eu.joaquim.workers.dev"
+        return "https://api.pinme.io"
     return "http://gps.frotaweb.com"
 def _get_session_from_host(request):
     """Extract session from subdomain, e.g. {session}.rastreon.net -> session."""
