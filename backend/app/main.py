@@ -17,6 +17,7 @@ from .chat import (
     REPORTS_DIR,
     TraccarAssistantServer,
     create_chatkit_server,
+    screenshot_tasks,
 )
 from .traccar import _get_cookie, _get_traccar_url
 
@@ -101,7 +102,12 @@ async def get_file(filename: str) -> Response:
         raise HTTPException(status_code=400, detail="Invalid file path")
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Report file not found")
+        # If a screenshot is still being generated, await it
+        task = screenshot_tasks.pop(filename, None)
+        if task:
+            await task
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Report file not found")
 
     # Determine media type based on file extension
     if filename.endswith(".html"):

@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
 REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
+# Pending screenshot tasks keyed by filename, so requests can await them
+screenshot_tasks: dict[str, asyncio.Task] = {}
 
 
 def _normalize_color_scheme(value: str) -> str:
@@ -391,6 +393,8 @@ async def show_html(
         screenshot_url = html_url.replace(".html", ".png")
 
         async def _take_screenshot() -> None:
+            import time
+            start = time.monotonic()
             try:
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
@@ -399,10 +403,12 @@ async def show_html(
                     await page.goto(html_url, wait_until="networkidle")
                     await page.screenshot(path=str(screenshot_path), full_page=True)
                     await browser.close()
-                    logger.info("Screenshot saved: %s", screenshot_path)
+                    elapsed = time.monotonic() - start
+                    logger.info("Screenshot saved: %s (%.1fs)", screenshot_path, elapsed)
             except Exception as e:
-                logger.warning("Screenshot failed: %s", e)
-        asyncio.create_task(_take_screenshot())
+                elapsed = time.monotonic() - start
+                logger.warning("Screenshot failed (%.1fs): %s", elapsed, e)
+        screenshot_tasks[screenshot_filename] = asyncio.create_task(_take_screenshot())
 
         attachment_id = _gen_id("att")
         attachment = ImageAttachment(
