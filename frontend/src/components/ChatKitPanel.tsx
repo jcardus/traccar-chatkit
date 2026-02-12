@@ -92,6 +92,7 @@ export function ChatKitPanel({
             setTimeout(trySend, 500)
           }
         }
+        trySend()
       }
     };
     window.addEventListener("message", handleMessage);
