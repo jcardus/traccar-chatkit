@@ -39,4 +39,4 @@ When instantiating mapboxgl.Map don't set the style property so that the default
 
 
 
-MODEL = "gpt-5-mini"
+MODEL = "gpt-5.6-luna"
