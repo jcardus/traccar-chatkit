@@ -5,10 +5,12 @@ import { ChatKitPanel } from "./ChatKitPanel";
 import { ColorScheme } from "../hooks/useColorScheme";
 import Map from "./Map";
 
-const SPLIT_STORAGE_KEY = "chat-split-pct";
-const MIN_PCT = 20;
-const MAX_PCT = 85;
-const DEFAULT_PCT = 66;
+// v2: chat moved to the left pane, so the stored percentage now sizes the chat.
+// New key so a value saved under the old (map-on-left) meaning isn't reused.
+const SPLIT_STORAGE_KEY = "chat-split-pct-v2";
+const MIN_PCT = 24;
+const MAX_PCT = 65;
+const DEFAULT_PCT = 34;
 
 function readStoredSplit(): number {
   try {
@@ -34,7 +36,7 @@ export default function Home({
   const [htmlContent, setHtmlContent] = useState(null);
 
   const splitRef = useRef<HTMLDivElement>(null);
-  const [leftPct, setLeftPct] = useState<number>(readStoredSplit);
+  const [chatPct, setChatPct] = useState<number>(readStoredSplit);
   const [dragging, setDragging] = useState(false);
 
   const onSplitterMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -46,8 +48,9 @@ export default function Home({
     if (rect.width === 0) {
       return;
     }
+    // Chat is the left pane, so distance from the left edge is its width.
     const pct = ((event.clientX - rect.left) / rect.width) * 100;
-    setLeftPct(Math.min(MAX_PCT, Math.max(MIN_PCT, pct)));
+    setChatPct(Math.min(MAX_PCT, Math.max(MIN_PCT, pct)));
   }, []);
 
   const onSplitterDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -62,7 +65,7 @@ export default function Home({
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       setDragging(false);
-      setLeftPct((pct) => {
+      setChatPct((pct) => {
         try {
           window.localStorage.setItem(SPLIT_STORAGE_KEY, String(Math.round(pct)));
         } catch {
@@ -115,21 +118,13 @@ export default function Home({
         >
           <div
             className="h-full min-w-0"
-            style={{ width: `${leftPct}%`, pointerEvents: dragging ? "none" : undefined }}
+            style={{ width: `${chatPct}%`, pointerEvents: dragging ? "none" : undefined }}
           >
-            {showMap && <Map data={mapData}></Map>}
-            {showHtml && htmlContent && (
-              <div className="w-full h-full p-0 m-0 bg-white">
-                  <iframe
-                      srcDoc={htmlContent}
-                      style={{
-                          height: "100%",
-                          width: "100%",
-                          border: "none",
-                      }}
-                  />
-              </div>
-            )}
+            <ChatKitPanel
+                theme={scheme}
+                onShowMap={onShowMap}
+                onShowHtml={onShowHtml}
+            />
           </div>
           <div
             role="separator"
@@ -144,12 +139,23 @@ export default function Home({
             <span className="absolute inset-y-0 -left-2 -right-2" />
             <span className="pointer-events-none h-10 w-1 rounded-full bg-slate-400/70 group-hover:bg-sky-400 dark:bg-slate-500/70 dark:group-hover:bg-sky-500" />
           </div>
-          <div className="h-full min-w-0 flex-1">
-            <ChatKitPanel
-                theme={scheme}
-                onShowMap={onShowMap}
-                onShowHtml={onShowHtml}
-            />
+          <div
+            className="h-full min-w-0 flex-1"
+            style={{ pointerEvents: dragging ? "none" : undefined }}
+          >
+            {showMap && <Map data={mapData}></Map>}
+            {showHtml && htmlContent && (
+              <div className="w-full h-full p-0 m-0 bg-white">
+                  <iframe
+                      srcDoc={htmlContent}
+                      style={{
+                          height: "100%",
+                          width: "100%",
+                          border: "none",
+                      }}
+                  />
+              </div>
+            )}
           </div>
         </div>
       </div>
