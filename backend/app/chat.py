@@ -39,7 +39,7 @@ from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
-from .traccar import invoke, _get_session_id, _get_traccar_url, fleetmap_url
+from .traccar import _get_session_id, _get_traccar_url, fleetmap_url, invoke
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -56,6 +56,34 @@ SHOW_HTML_SCREENSHOT_PROMPT: Final[str] = (
 REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
 # Pending screenshot tasks keyed by filename, so requests can await them
 screenshot_tasks: dict[str, asyncio.Task] = {}
+
+# Runs in the page before a screenshot: wait for webfonts, then for the DOM to
+# be quiet for `settleMs` (JS that renders charts/maps after load), capped at
+# `capMs`, then two paint frames. Used only when the page does not set
+# `window.__SCREENSHOT_READY__` itself.
+_RENDER_SETTLE_JS: Final[str] = """
+() => new Promise((resolve) => {
+    const settleMs = 400;
+    const capMs = 8000;
+    const start = Date.now();
+    let last = Date.now();
+    const obs = new MutationObserver(() => { last = Date.now(); });
+    obs.observe(document.documentElement, {
+        subtree: true, childList: true, attributes: true, characterData: true,
+    });
+    const finish = () => {
+        obs.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    };
+    const tick = () => {
+        if (Date.now() - last >= settleMs || Date.now() - start >= capMs) finish();
+        else setTimeout(tick, 100);
+    };
+    const fonts = (document.fonts && document.fonts.ready)
+        ? document.fonts.ready : Promise.resolve();
+    fonts.then(tick, tick);
+})
+"""
 
 
 def _normalize_color_scheme(value: str) -> str:
@@ -100,7 +128,12 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_url: str = "http://gps.frotaweb.com") -> str:
+def _save_html_file(
+    html: str,
+    email: str | None,
+    cookie: str | None = None,
+    traccar_url: str = "http://gps.frotaweb.com",
+) -> str:
     """Save HTML to a file and return the public URL (no DB write).
 
     When *session* is provided it is embedded as a subdomain so the server
@@ -120,6 +153,7 @@ def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_ur
 
     # Insert session as a subdomain: https://host -> https://{session}.host
     from urllib.parse import urlparse, urlunparse
+
     if traccar_url == fleetmap_url:
         base_domain = "https://i8ttracker.com.br"
     else:
@@ -177,9 +211,7 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
 class TraccarThreadItemConverter(ThreadItemConverter):
     """Converts image attachments to input_image content for the model."""
 
-    async def attachment_to_message_content(
-        self, attachment
-    ) -> ResponseInputContentParam:
+    async def attachment_to_message_content(self, attachment) -> ResponseInputContentParam:
         if isinstance(attachment, ImageAttachment):
             return ResponseInputImageParam(
                 type="input_image",
@@ -265,7 +297,12 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 
-        logger.info("respond: item=%s target_item=%s type=%s", type(item).__name__ if item else None, type(target_item).__name__ if target_item else None, getattr(target_item, "type", None))
+        logger.info(
+            "respond: item=%s target_item=%s type=%s",
+            type(item).__name__ if item else None,
+            type(target_item).__name__ if target_item else None,
+            getattr(target_item, "type", None),
+        )
 
         if target_item is None:
             return
@@ -406,10 +443,10 @@ MAX_RESPONSE_SIZE: Final[int] = 548576
 
 @function_tool(description_override="invoke traccar api")
 async def invoke_api(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        method: str,
-        path: str,
-        body: str,
+    ctx: RunContextWrapper[TraccarAgentContext],
+    method: str,
+    path: str,
+    body: str,
 ):
     result = invoke(
         method,
@@ -440,10 +477,9 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
         logger.warning("Failed to get user from Traccar: %s", e)
         return None
 
+
 @function_tool(description_override="Display rendered html to the user")
-async def show_html(
-    ctx: RunContextWrapper[TraccarAgentContext], html: str
-) -> dict[str, str]:
+async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
     try:
         logger.info("TOOL: show_html")
         js_error = _validate_js_syntax(html)
@@ -462,22 +498,64 @@ async def show_html(
 
         async def _take_screenshot() -> None:
             import time
+
             start = time.monotonic()
             try:
+                from playwright.async_api import TimeoutError as PlaywrightTimeoutError
                 from playwright.async_api import async_playwright
+
                 async with async_playwright() as p:
                     browser = await p.chromium.launch()
-                    page = await browser.new_page(viewport={"width": 1280, "height": 720})
-                    await page.goto(html_url, wait_until="networkidle", timeout=90000)
-                    await page.screenshot(path=str(screenshot_path), full_page=True, timeout=120000)
-                    await browser.close()
-                    elapsed = time.monotonic() - start
-                    logger.info("Screenshot saved: %s (%.1fs)", screenshot_path, elapsed)
+                    try:
+                        page = await browser.new_page(viewport={"width": 1280, "height": 720})
+                        await page.goto(html_url, wait_until="load", timeout=90000)
+
+                        # Best-effort network settle. Cap it short: some pages
+                        # keep a connection open and never reach "idle".
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=15000)
+                        except PlaywrightTimeoutError:
+                            pass
+
+                        # If the page signals its own readiness, trust that and
+                        # skip the heuristics below.
+                        signalled = False
+                        try:
+                            await page.wait_for_function(
+                                "window.__SCREENSHOT_READY__ === true", timeout=10000
+                            )
+                            signalled = True
+                        except PlaywrightTimeoutError:
+                            pass
+
+                        if not signalled:
+                            # Wait for webfonts, then for the DOM to stop
+                            # mutating (JS-driven charts/maps rendering after
+                            # load), then a couple of paint frames.
+                            try:
+                                await page.evaluate(_RENDER_SETTLE_JS)
+                            except Exception as exc:  # best effort only
+                                logger.info("render-settle wait skipped: %s", exc)
+                            await page.wait_for_timeout(500)
+
+                        await page.screenshot(
+                            path=str(screenshot_path), full_page=True, timeout=120000
+                        )
+                        elapsed = time.monotonic() - start
+                        logger.info(
+                            "Screenshot saved: %s (%.1fs%s)",
+                            screenshot_path,
+                            elapsed,
+                            ", signalled" if signalled else "",
+                        )
+                    finally:
+                        await browser.close()
             except Exception as e:
                 elapsed = time.monotonic() - start
                 logger.warning("Screenshot failed (%.1fs): %s", elapsed, e)
             finally:
                 screenshot_tasks.pop(screenshot_filename, None)
+
         screenshot_tasks[screenshot_filename] = asyncio.create_task(_take_screenshot())
 
         # The frontend renders the HTML, warms `screenshot_url` (which blocks on
@@ -499,10 +577,9 @@ async def show_html(
         logger.exception("show_html failed")
         return {"error": "Internal error rendering HTML"}
 
+
 @function_tool(description_override="Forward the user question to a real agent.")
-async def forward_to_real_agent(
-    ctx: RunContextWrapper[TraccarAgentContext], question: str
-) -> str:
+async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], question: str) -> str:
     logger.info("forward_to_real_agent")
     """Send the user's question to support via email."""
     request = ctx.context.request_context.get("request")
@@ -524,6 +601,7 @@ async def forward_to_real_agent(
         },
     )
     return "Your question has been forwarded to our support team. They will get back to you soon."
+
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
 async def get_openapi_yaml() -> str:

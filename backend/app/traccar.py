@@ -5,6 +5,7 @@ import requests
 logger = logging.getLogger(__name__)
 fleetmap_url = "https://api.pinme.io"
 
+
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
     logger.info("Request origin: %s", origin)
@@ -16,7 +17,7 @@ def _get_traccar_url(request):
         "https://fleetmap.io",
         "https://plataforma.puntosat.cl",
         "https://afconsultingsystems.com",
-        "https://plataforma.ubisat.cl"
+        "https://plataforma.ubisat.cl",
     ]
     if origin and any(origin.startswith(domain) for domain in fleetmap_origins):
         return fleetmap_url
@@ -24,6 +25,8 @@ def _get_traccar_url(request):
     if "i8ttracker.com.br" in hostname:
         return "https://api.pinme.io"
     return "http://gps.frotaweb.com"
+
+
 def _get_session_from_host(request):
     """Extract session from subdomain, e.g. {session}.rastreon.net -> session."""
     host = request.headers.get("host", "")
@@ -32,6 +35,7 @@ def _get_session_from_host(request):
     if len(parts) >= 3:
         return parts[0]
     return None
+
 
 def _get_session_id(request):
     """Extract the bare JSESSIONID value (without .node0 suffix) from the request."""
@@ -43,6 +47,7 @@ def _get_session_id(request):
         if part.startswith("JSESSIONID="):
             return part.split("=", 1)[1].split(".")[0]
     return None
+
 
 def _get_cookie(request):
     """Get a cookie from x-fleet-session, cookie header, or hostname subdomain."""
@@ -59,6 +64,8 @@ def _get_cookie(request):
     if session:
         return f"JSESSIONID={session}"
     return None
+
+
 def invoke(method, path, body, request):
     """Generic API invocation with an arbitrary JSON body string."""
     import json as json_module

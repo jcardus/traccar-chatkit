@@ -11,8 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
-
 from .chat import (
     REPORTS_DIR,
     TraccarAssistantServer,
@@ -20,6 +18,8 @@ from .chat import (
     screenshot_tasks,
 )
 from .traccar import _get_cookie, _get_traccar_url
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ChatKit API")
 
@@ -38,13 +38,17 @@ def _real_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
         return xff.split(",")[0].strip()
-    return request.headers.get("CF-Connecting-IP") or (request.client.host if request.client else "unknown")
+    return request.headers.get("CF-Connecting-IP") or (
+        request.client.host if request.client else "unknown"
+    )
 
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     ip = _real_ip(request)
-    logger.info("%s %s %s %s", ip, request.method, request.url.path, request.headers.get('cf-ipcountry'))
+    logger.info(
+        "%s %s %s %s", ip, request.method, request.url.path, request.headers.get("cf-ipcountry")
+    )
     return await call_next(request)
 
 
@@ -86,9 +90,7 @@ async def proxy_traccar(request: Request, path: str) -> Response:
         )
 
     excluded = {"transfer-encoding", "content-encoding", "content-length"}
-    resp_headers = {
-        k: v for k, v in resp.headers.items() if k.lower() not in excluded
-    }
+    resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
     return Response(content=resp.content, status_code=resp.status_code, headers=resp_headers)
 
 
