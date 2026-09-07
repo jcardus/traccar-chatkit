@@ -43,7 +43,13 @@ async def _get_pool() -> AsyncConnectionPool:
     global _pool
     if _pool is None:
         conninfo = os.environ["DATABASE_URL"]
-        _pool = AsyncConnectionPool(conninfo=conninfo, min_size=1, max_size=10, open=False, check=AsyncConnectionPool.check_connection)
+        _pool = AsyncConnectionPool(
+            conninfo=conninfo,
+            min_size=1,
+            max_size=10,
+            open=False,
+            check=AsyncConnectionPool.check_connection,
+        )
         await _pool.open()
     return _pool
 
@@ -158,9 +164,7 @@ class NeonStore(Store[dict[str, Any]]):
         await self._ensure_schema()
         pool = await _get_pool()
         async with pool.connection() as conn:
-            cur = await conn.execute(
-                "SELECT data FROM threads WHERE id = %s", (thread_id,)
-            )
+            cur = await conn.execute("SELECT data FROM threads WHERE id = %s", (thread_id,))
             row = await cur.fetchone()
             if not row:
                 raise NotFoundError(f"Thread {thread_id} not found")
@@ -332,7 +336,9 @@ class NeonStore(Store[dict[str, Any]]):
             await conn.execute("DELETE FROM thread_items WHERE id = %s", (item_id,))
 
     # -- HTML reports ----------------------------------------------------
-    async def save_html_report(self, user_id: str | None, thread_id: str, url: str, image_url: str | None = None) -> None:
+    async def save_html_report(
+        self, user_id: str | None, thread_id: str, url: str, image_url: str | None = None
+    ) -> None:
         await self._ensure_schema()
         pool = await _get_pool()
         report_id = uuid4().hex

@@ -39,7 +39,7 @@ from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
-from .traccar import invoke, _get_session_id, _get_traccar_url, fleetmap_url
+from .traccar import _get_session_id, _get_traccar_url, fleetmap_url, invoke
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -100,7 +100,12 @@ def _validate_js_syntax(html: str) -> str | None:
     return None
 
 
-def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_url: str = "http://gps.frotaweb.com") -> str:
+def _save_html_file(
+    html: str,
+    email: str | None,
+    cookie: str | None = None,
+    traccar_url: str = "http://gps.frotaweb.com",
+) -> str:
     """Save HTML to a file and return the public URL (no DB write).
 
     When *session* is provided it is embedded as a subdomain so the server
@@ -120,6 +125,7 @@ def _save_html_file(html: str, email: str, cookie: str | None = None, traccar_ur
 
     # Insert session as a subdomain: https://host -> https://{session}.host
     from urllib.parse import urlparse, urlunparse
+
     if traccar_url == fleetmap_url:
         base_domain = "https://i8ttracker.com.br"
     else:
@@ -177,9 +183,7 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
 class TraccarThreadItemConverter(ThreadItemConverter):
     """Converts image attachments to input_image content for the model."""
 
-    async def attachment_to_message_content(
-        self, attachment
-    ) -> ResponseInputContentParam:
+    async def attachment_to_message_content(self, attachment) -> ResponseInputContentParam:
         if isinstance(attachment, ImageAttachment):
             return ResponseInputImageParam(
                 type="input_image",
@@ -265,7 +269,12 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 
-        logger.info("respond: item=%s target_item=%s type=%s", type(item).__name__ if item else None, type(target_item).__name__ if target_item else None, getattr(target_item, "type", None))
+        logger.info(
+            "respond: item=%s target_item=%s type=%s",
+            type(item).__name__ if item else None,
+            type(target_item).__name__ if target_item else None,
+            getattr(target_item, "type", None),
+        )
 
         if target_item is None:
             return
@@ -406,10 +415,10 @@ MAX_RESPONSE_SIZE: Final[int] = 548576
 
 @function_tool(description_override="invoke traccar api")
 async def invoke_api(
-        ctx: RunContextWrapper[TraccarAgentContext],
-        method: str,
-        path: str,
-        body: str,
+    ctx: RunContextWrapper[TraccarAgentContext],
+    method: str,
+    path: str,
+    body: str,
 ):
     result = invoke(
         method,
@@ -440,10 +449,9 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
         logger.warning("Failed to get user from Traccar: %s", e)
         return None
 
+
 @function_tool(description_override="Display rendered html to the user")
-async def show_html(
-    ctx: RunContextWrapper[TraccarAgentContext], html: str
-) -> dict[str, str]:
+async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
     try:
         logger.info("TOOL: show_html")
         js_error = _validate_js_syntax(html)
@@ -462,9 +470,11 @@ async def show_html(
 
         async def _take_screenshot() -> None:
             import time
+
             start = time.monotonic()
             try:
                 from playwright.async_api import async_playwright
+
                 async with async_playwright() as p:
                     browser = await p.chromium.launch()
                     page = await browser.new_page(viewport={"width": 1280, "height": 720})
@@ -478,6 +488,7 @@ async def show_html(
                 logger.warning("Screenshot failed (%.1fs): %s", elapsed, e)
             finally:
                 screenshot_tasks.pop(screenshot_filename, None)
+
         screenshot_tasks[screenshot_filename] = asyncio.create_task(_take_screenshot())
 
         # The frontend renders the HTML, warms `screenshot_url` (which blocks on
@@ -499,10 +510,9 @@ async def show_html(
         logger.exception("show_html failed")
         return {"error": "Internal error rendering HTML"}
 
+
 @function_tool(description_override="Forward the user question to a real agent.")
-async def forward_to_real_agent(
-    ctx: RunContextWrapper[TraccarAgentContext], question: str
-) -> str:
+async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], question: str) -> str:
     logger.info("forward_to_real_agent")
     """Send the user's question to support via email."""
     request = ctx.context.request_context.get("request")
@@ -524,6 +534,7 @@ async def forward_to_real_agent(
         },
     )
     return "Your question has been forwarded to our support team. They will get back to you soon."
+
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
 async def get_openapi_yaml() -> str:

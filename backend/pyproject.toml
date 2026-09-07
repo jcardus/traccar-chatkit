@@ -21,6 +21,7 @@ dev = [
     "ruff>=0.6.4,<0.7",
     "mypy>=1.8,<2",
     "openai-chatkit>=1.6.5,<2",
+    "types-requests",
 ]
 
 [build-system]
