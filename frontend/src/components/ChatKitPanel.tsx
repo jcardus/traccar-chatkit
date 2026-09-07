@@ -12,7 +12,6 @@ type ChatKitPanelProps = {
   onShowHtml: (invocation) => void;
 };
 
-console.log('chatkit 1.1')
 
 export function ChatKitPanel({
   theme,
