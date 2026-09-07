@@ -31,6 +31,7 @@ Do NOT include integrity attributes on any script or CSS imports.
 When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).
 Include a global error catching in your javascript and call window.parent.postMessage with type 'html-error', this way the error will be sent back to you in a user message.
 After you call show_html, a screenshot of the rendered page will be sent back to you as an image in the next user message. Use it to verify the HTML looks correct and fix any visual issues.
+If your page renders charts, maps, or other content with JavaScript after load, set `window.__SCREENSHOT_READY__ = true` once that rendering is finished (for a Mapbox map, do it on the map's 'idle' event) so the screenshot waits for it instead of guessing.
 
 When rendering maps, prefer Mapbox. Use Mapbox GL JS version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
 When instantiating mapboxgl.Map don't set the style property so that the default will be used.

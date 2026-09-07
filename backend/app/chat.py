@@ -57,6 +57,34 @@ REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
 # Pending screenshot tasks keyed by filename, so requests can await them
 screenshot_tasks: dict[str, asyncio.Task] = {}
 
+# Runs in the page before a screenshot: wait for webfonts, then for the DOM to
+# be quiet for `settleMs` (JS that renders charts/maps after load), capped at
+# `capMs`, then two paint frames. Used only when the page does not set
+# `window.__SCREENSHOT_READY__` itself.
+_RENDER_SETTLE_JS: Final[str] = """
+() => new Promise((resolve) => {
+    const settleMs = 400;
+    const capMs = 8000;
+    const start = Date.now();
+    let last = Date.now();
+    const obs = new MutationObserver(() => { last = Date.now(); });
+    obs.observe(document.documentElement, {
+        subtree: true, childList: true, attributes: true, characterData: true,
+    });
+    const finish = () => {
+        obs.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    };
+    const tick = () => {
+        if (Date.now() - last >= settleMs || Date.now() - start >= capMs) finish();
+        else setTimeout(tick, 100);
+    };
+    const fonts = (document.fonts && document.fonts.ready)
+        ? document.fonts.ready : Promise.resolve();
+    fonts.then(tick, tick);
+})
+"""
+
 
 def _normalize_color_scheme(value: str) -> str:
     normalized = str(value).strip().lower()
@@ -473,16 +501,55 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
 
             start = time.monotonic()
             try:
+                from playwright.async_api import TimeoutError as PlaywrightTimeoutError
                 from playwright.async_api import async_playwright
 
                 async with async_playwright() as p:
                     browser = await p.chromium.launch()
-                    page = await browser.new_page(viewport={"width": 1280, "height": 720})
-                    await page.goto(html_url, wait_until="networkidle", timeout=90000)
-                    await page.screenshot(path=str(screenshot_path), full_page=True, timeout=120000)
-                    await browser.close()
-                    elapsed = time.monotonic() - start
-                    logger.info("Screenshot saved: %s (%.1fs)", screenshot_path, elapsed)
+                    try:
+                        page = await browser.new_page(viewport={"width": 1280, "height": 720})
+                        await page.goto(html_url, wait_until="load", timeout=90000)
+
+                        # Best-effort network settle. Cap it short: some pages
+                        # keep a connection open and never reach "idle".
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=15000)
+                        except PlaywrightTimeoutError:
+                            pass
+
+                        # If the page signals its own readiness, trust that and
+                        # skip the heuristics below.
+                        signalled = False
+                        try:
+                            await page.wait_for_function(
+                                "window.__SCREENSHOT_READY__ === true", timeout=10000
+                            )
+                            signalled = True
+                        except PlaywrightTimeoutError:
+                            pass
+
+                        if not signalled:
+                            # Wait for webfonts, then for the DOM to stop
+                            # mutating (JS-driven charts/maps rendering after
+                            # load), then a couple of paint frames.
+                            try:
+                                await page.evaluate(_RENDER_SETTLE_JS)
+                            except Exception as exc:  # best effort only
+                                logger.info("render-settle wait skipped: %s", exc)
+                            await page.wait_for_timeout(500)
+
+                        await page.screenshot(
+                            path=str(screenshot_path), full_page=True, timeout=120000
+                        )
+                        elapsed = time.monotonic() - start
+                        logger.info(
+                            "Screenshot saved: %s (%.1fs%s)",
+                            screenshot_path,
+                            elapsed,
+                            ", signalled" if signalled else "",
+                        )
+                    finally:
+                        await browser.close()
             except Exception as e:
                 elapsed = time.monotonic() - start
                 logger.warning("Screenshot failed (%.1fs): %s", elapsed, e)
