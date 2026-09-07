@@ -47,36 +47,35 @@ export function ChatKitPanel({
         return { success: true };
       } else if (invocation.name === "show_html") {
         onShowHtml(invocation);
-        let attachment;
-        try {
-          const raw = invocation.params?.attachment;
-          attachment = typeof raw === "string" ? JSON.parse(raw) : raw;
-        } catch (e) {
-          console.error("Failed to parse attachment:", e);
+        const screenshotUrl = invocation.params?.screenshot_url as
+          | string
+          | undefined;
+        if (!screenshotUrl) {
+          return { success: true };
         }
-        if (attachment) {
-          const send = async () => {
-            try {
-              await fetch(attachment.preview_url).catch()
-              await chatkit.sendUserMessage({
-                attachments: [
-                  {
-                    id: attachment.id,
-                    type: attachment.type,
-                    name: attachment.name,
-                    mime_type: attachment.mime_type,
-                    preview_url: attachment.preview_url,
-                  },
-                ],
-              });
-            } catch (e) {
-              console.error("Failed to send screenshot message:", e);
-              setTimeout(send, 1000);
+        // Warm the screenshot before answering the tool call. GET /chatkit/{png}
+        // awaits the pending server-side screenshot task, so a 200 here means
+        // the image is ready for the model to fetch. The value returned from
+        // this callback is POSTed back as threads.add_client_tool_output, which
+        // re-enters the server's respond() with the screenshot in hand. Only
+        // hand back the URL if it actually resolved, so the model is never fed
+        // a dead image link.
+        let screenshotReady = false;
+        for (let attempt = 0; attempt < 20; attempt++) {
+          try {
+            const res = await fetch(screenshotUrl, { cache: "no-store" });
+            if (res.ok) {
+              screenshotReady = true;
+              break;
             }
-          };
-          await send();
+          } catch (e) {
+            console.warn("screenshot not ready, retrying", e);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
-        return { success: true };
+        return screenshotReady
+          ? { success: true, screenshot_url: screenshotUrl }
+          : { success: true };
       }
       return { success: false };
     }

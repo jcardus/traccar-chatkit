@@ -29,9 +29,13 @@ from chatkit.types import (
     ThreadMetadata,
     UserMessageItem,
 )
-from openai.types.responses import ResponseInputContentParam
+from openai.types.responses import (
+    EasyInputMessageParam,
+    ResponseInputContentParam,
+    ResponseInputTextParam,
+)
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
-from pydantic import AnyUrl, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
@@ -42,6 +46,13 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
 CLIENT_THEME_TOOL_NAME: Final[str] = "switch_theme"
+SHOW_HTML_TOOL_NAME: Final[str] = "show_html"
+SHOW_HTML_SCREENSHOT_PROMPT: Final[str] = (
+    "This is a screenshot of the HTML you just rendered for the user. Review it: "
+    "if the layout is broken, data is missing, or something looks wrong, call "
+    "show_html again with corrected HTML. Otherwise give the user a brief "
+    "confirmation of what you rendered."
+)
 REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
 # Pending screenshot tasks keyed by filename, so requests can await them
 screenshot_tasks: dict[str, asyncio.Task] = {}
@@ -125,6 +136,25 @@ def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
 
 
+def _screenshot_url_from_output(output: Any) -> str | None:
+    if isinstance(output, dict):
+        url = output.get("screenshot_url")
+        if isinstance(url, str) and url:
+            return url
+    return None
+
+
+def _completed_show_html_screenshot_url(item: Any) -> str | None:
+    """Screenshot URL if *item* is a show_html call the frontend answered with one."""
+    if (
+        isinstance(item, ClientToolCallItem)
+        and item.name == SHOW_HTML_TOOL_NAME
+        and item.status == "completed"
+    ):
+        return _screenshot_url_from_output(item.output)
+    return None
+
+
 def _thread_item_done(thread_id: str, item: Any) -> Any:
     if ThreadItemDoneEvent is None:
         raise RuntimeError("ThreadItemDoneEvent type is unavailable")
@@ -157,6 +187,37 @@ class TraccarThreadItemConverter(ThreadItemConverter):
                 detail="low",
             )
         raise NotImplementedError(f"Unsupported attachment type: {attachment.type}")
+
+    async def client_tool_call_to_input(self, item: ClientToolCallItem):
+        """Feed the show_html screenshot back to the model as an image.
+
+        The frontend answers the pending ``show_html`` client tool call (via
+        ``threads.add_client_tool_output``) with ``{"screenshot_url": ...}``.
+        ChatKit then re-enters ``respond(thread, None)``; we splice the
+        screenshot into the model input as a user-role image message so the
+        model can visually verify what it rendered and iterate if needed.
+        """
+        if isinstance(item, ClientToolCallItem) and item.name == SHOW_HTML_TOOL_NAME:
+            # show_html runs server-side as a real function tool, so its
+            # function_call / output already live under previous_response_id.
+            # Re-emitting them here (super()'s behaviour) would duplicate the
+            # call_id. Only contribute the screenshot, when we have one.
+            screenshot_url = _completed_show_html_screenshot_url(item)
+            if not screenshot_url:
+                return None
+            content: list[ResponseInputContentParam] = [
+                ResponseInputImageParam(
+                    type="input_image",
+                    image_url=screenshot_url,
+                    detail="low",
+                ),
+                ResponseInputTextParam(
+                    type="input_text",
+                    text=SHOW_HTML_SCREENSHOT_PROMPT,
+                ),
+            ]
+            return [EasyInputMessageParam(type="message", role="user", content=content)]
+        return await super().client_tool_call_to_input(item)
 
 
 class TraccarAgentContext(AgentContext):
@@ -213,7 +274,14 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         previous_response_id = metadata.get("previous_response_id")
         agent_context.previous_response_id = previous_response_id
 
-        if _is_tool_completion_item(target_item):
+        # Client tool calls normally end the turn. The exception is a completed
+        # show_html call carrying a screenshot URL: the frontend attached the
+        # rendered screenshot and ChatKit re-entered respond() so the model can
+        # review it.
+        if (
+            _is_tool_completion_item(target_item)
+            and _completed_show_html_screenshot_url(target_item) is None
+        ):
             return
 
         agent_input = await self._to_agent_input(thread, target_item)
@@ -258,7 +326,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         thread: ThreadMetadata,
         item: Any,
     ) -> Any | None:
-        if _is_tool_completion_item(item):
+        if _is_tool_completion_item(item) and _completed_show_html_screenshot_url(item) is None:
             return None
 
         converter = getattr(self, "_thread_item_converter", None)
@@ -412,28 +480,17 @@ async def show_html(
                 screenshot_tasks.pop(screenshot_filename, None)
         screenshot_tasks[screenshot_filename] = asyncio.create_task(_take_screenshot())
 
-        attachment_id = _gen_id("att")
-        attachment = ImageAttachment(
-            id=attachment_id,
-            name="screenshot.png",
-            mime_type="image/png",
-            preview_url=AnyUrl(screenshot_url),
-        )
-        await ctx.context.store.save_attachment(attachment, ctx.context.request_context)
-        logger.info("Saved screenshot attachment %s for %s", attachment_id, html_url)
-
+        # The frontend renders the HTML, warms `screenshot_url` (which blocks on
+        # the background screenshot task server-side), then answers this client
+        # tool call with {"screenshot_url": ...}. ChatKit re-enters respond() and
+        # TraccarThreadItemConverter.client_tool_call_to_input feeds the image
+        # back to the model.
         ctx.context.client_tool_call = ClientToolCall(
             name="show_html",
             arguments={
                 "html": html,
                 "html_url": html_url,
-                "attachment": json.dumps({
-                    "id": attachment_id,
-                    "type": "image",
-                    "name": "screenshot.png",
-                    "mime_type": "image/png",
-                    "preview_url": screenshot_url,
-                }),
+                "screenshot_url": screenshot_url,
             },
         )
         logger.info("show_html success")
