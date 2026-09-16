@@ -103,6 +103,16 @@ export default function Home({
     }
   }
 
+  // Switching to a thread (e.g. from the history list) with no rendered
+  // report of its own -- reset to the blank default rather than leaving the
+  // previous thread's HTML/map showing.
+  const onClearPanel = () => {
+    setShowHtml(false);
+    setHtmlContent(null);
+    setShowMap(true);
+    setMapData(null);
+  }
+
   return (
     <div className={containerClass}>
       <div className="mx-auto flex min-h-screen w-full max-w-12xl flex-col-reverse lg:flex-row">
@@ -124,6 +134,7 @@ export default function Home({
                 theme={scheme}
                 onShowMap={onShowMap}
                 onShowHtml={onShowHtml}
+                onClearPanel={onClearPanel}
             />
           </div>
           <div
