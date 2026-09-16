@@ -275,6 +275,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         tools = [
             invoke_api,
             show_html,
+            get_map_template,
             get_openapi_yaml,
         ]
         self.assistant = Agent[TraccarAgentContext](
@@ -633,3 +634,15 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
 async def get_openapi_yaml() -> str:
     logger.info("TOOL: get_openapi_yaml")
     return (Path(__file__).parent / "openapi.yaml").read_text()
+
+
+@function_tool(
+    description_override=(
+        "A working Mapbox GL HTML page to use as the starting point when rendering a map. "
+        "Fetch this before writing any map HTML, fill in the marked section with your data, "
+        "then pass the result to show_html."
+    )
+)
+async def get_map_template() -> str:
+    logger.info("TOOL: get_map_template")
+    return (Path(__file__).parent / "map_template.html").read_text()

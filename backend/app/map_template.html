@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    // Do not remove: this is how a broken page reports back to the assistant.
+    window.onerror = function (message, source, lineno, colno) {
+      try {
+        window.parent.postMessage(
+          { type: 'html-error', message: String(message) + ' at line ' + lineno + ':' + colno },
+          '*'
+        );
+      } catch (e) { /* no-op */ }
+    };
+    window.addEventListener('unhandledrejection', function (event) {
+      try {
+        window.parent.postMessage(
+          { type: 'html-error', message: 'Unhandled promise rejection: ' + event.reason },
+          '*'
+        );
+      } catch (e) { /* no-op */ }
+    });
+
+    mapboxgl.accessToken =
+      'pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg';
+
+    // Do not set `style` -- the default is already configured for this app.
+    const map = new mapboxgl.Map({
+      container: 'map',
+      center: [0, 0],
+      zoom: 2,
+    });
+    map.addControl(new mapboxgl.NavigationControl());
+
+    map.on('load', () => {
+      try {
+        // -----------------------------------------------------------------
+        // Replace everything below with your real data. Keep everything
+        // above (the script tags, error handlers, token, map setup) as-is.
+        //
+        // Typical Traccar shapes you'll fetch via invoke_api:
+        //   GET /devices   -> [{ id, name, status, lastUpdate, ... }]
+        //   GET /positions -> [{ deviceId, latitude, longitude, speed,
+        //                        course, fixTime, ... }]
+        //
+        // Build one GeoJSON FeatureCollection per logical group (devices,
+        // a route, geofences, ...). geometry.coordinates is
+        // [longitude, latitude] -- note the order. Put whatever you want to
+        // show in a popup or label into feature.properties.
+
+        const exampleData = {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [0, 0] },
+              properties: { name: 'Example device' },
+            },
+          ],
+        };
+
+        map.addSource('example', { type: 'geojson', data: exampleData });
+
+        map.addLayer({
+          id: 'example-points',
+          type: 'circle',
+          source: 'example',
+          paint: {
+            'circle-radius': 6,
+            'circle-color': '#ff0000',
+            'circle-stroke-color': '#fff',
+            'circle-stroke-width': 1.5,
+          },
+        });
+
+        // Optional: a popup on click, keyed to the layer above.
+        map.on('click', 'example-points', (e) => {
+          const feature = e.features[0];
+          new mapboxgl.Popup()
+            .setLngLat(feature.geometry.coordinates)
+            .setHTML(feature.properties.name || '')
+            .addTo(map);
+        });
+
+        // Fit the map to your data once it's added. Collect every
+        // [lng, lat] pair you rendered above into `coords`.
+        const coords = exampleData.features
+          .filter((f) => f.geometry.type === 'Point')
+          .map((f) => f.geometry.coordinates);
+        if (coords.length) {
+          const bounds = coords.reduce(
+            (b, c) => b.extend(c),
+            new mapboxgl.LngLatBounds(coords[0], coords[0])
+          );
+          map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
+        }
+        // -----------------------------------------------------------------
+      } catch (e) {
+        window.parent.postMessage({ type: 'html-error', message: 'Map setup failed: ' + e.message }, '*');
+      }
+    });
+
+    // Do not remove: tells the backend screenshot step rendering has settled.
+    map.on('idle', () => { window.__SCREENSHOT_READY__ = true; });
+  </script>
+</body>
+</html>

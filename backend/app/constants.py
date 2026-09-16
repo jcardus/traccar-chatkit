@@ -33,8 +33,14 @@ Include a global error catching in your javascript and call window.parent.postMe
 After you call show_html, a screenshot of the rendered page will be sent back to you as an image in the next user message. Use it to verify the HTML looks correct and fix any visual issues.
 If your page renders charts, maps, or other content with JavaScript after load, set `window.__SCREENSHOT_READY__ = true` once that rendering is finished (for a Mapbox map, do it on the map's 'idle' event) so the screenshot waits for it instead of guessing.
 
-When rendering maps, prefer Mapbox. Use Mapbox GL JS version v3.18.1 or newer with this token: pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg
-When instantiating mapboxgl.Map don't set the style property so that the default will be used.
+RENDERING MAPS
+-------
+Whenever you need to show a map, call the `get_map_template` tool FIRST and use its output as the starting point -- do not write Mapbox boilerplate from scratch. The template already has the correct script/CSS tags, token, map setup, error reporting, and the `__SCREENSHOT_READY__` signal wired up. Only fill in the clearly marked section with your data (a GeoJSON source + layer per group of features), then pass the completed HTML to show_html. This is the single biggest source of broken maps, so do not skip this step or "simplify" the boilerplate away.
+
+Data you'll typically fetch with invoke_api to build that GeoJSON:
+- GET /devices -> [{ id, name, status, lastUpdate, ... }]
+- GET /positions -> [{ deviceId, latitude, longitude, speed, course, fixTime, ... }] (speed is in knots -- convert to km/h)
+Remember GeoJSON coordinates are [longitude, latitude], not [latitude, longitude].
 
 """
 
