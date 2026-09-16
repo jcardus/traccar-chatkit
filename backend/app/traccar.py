@@ -1,9 +1,15 @@
 import logging
+import time
 
 import requests
 
 logger = logging.getLogger(__name__)
 fleetmap_url = "https://api.pinme.io"
+
+# Traccar has occasionally hung indefinitely on requests.request with no
+# timeout set, stalling the event loop (invoke() is called synchronously from
+# async tool code) and cascading into upstream Vercel proxy timeouts.
+TRACCAR_REQUEST_TIMEOUT = 25
 
 
 def _get_traccar_url(request):
@@ -80,6 +86,19 @@ def invoke(method, path, body, request):
     logger.info("%s %s %s", method.upper(), url, body)
 
     parsed_body = json_module.loads(body) if body else None
-    response = requests.request(method.upper(), url, headers=headers, json=parsed_body)
-    response.raise_for_status()
-    return response.json()
+    start = time.monotonic()
+    try:
+        response = requests.request(
+            method.upper(),
+            url,
+            headers=headers,
+            json=parsed_body,
+            timeout=TRACCAR_REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()
+    finally:
+        elapsed = time.monotonic() - start
+        logger.info("%s %s took %.2fs", method.upper(), url, elapsed)
+        if elapsed > 5:
+            logger.warning("Slow Traccar request: %s %s took %.2fs", method.upper(), url, elapsed)

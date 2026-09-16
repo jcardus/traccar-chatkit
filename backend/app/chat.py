@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, AsyncIterator, Final, cast
@@ -287,6 +288,22 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         item: UserMessageItem | None,
         context: dict[str, Any],
     ) -> AsyncIterator[Any]:
+        turn_start = time.monotonic()
+        try:
+            async for event in self._respond(thread, item, context):
+                yield event
+        finally:
+            elapsed = time.monotonic() - turn_start
+            logger.info("respond turn: thread=%s took %.2fs", thread.id, elapsed)
+            if elapsed > 20:
+                logger.warning("Slow respond turn: thread=%s took %.2fs", thread.id, elapsed)
+
+    async def _respond(
+        self,
+        thread: ThreadMetadata,
+        item: UserMessageItem | None,
+        context: dict[str, Any],
+    ) -> AsyncIterator[Any]:
         agent_context = TraccarAgentContext(
             thread=thread,
             store=self.store,
@@ -331,8 +348,17 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             context=agent_context,
             previous_response_id=previous_response_id,
         )
+        run_start = time.monotonic()
+        event_count = 0
         async for event in stream_agent_response(agent_context, result):
+            event_count += 1
             yield event
+        logger.info(
+            "agent run: thread=%s events=%d took %.2fs",
+            thread.id,
+            event_count,
+            time.monotonic() - run_start,
+        )
 
         response_identifier = getattr(result, "last_response_id", None)
         if response_identifier is not None:
@@ -448,12 +474,14 @@ async def invoke_api(
     path: str,
     body: str,
 ):
+    start = time.monotonic()
     result = invoke(
         method,
         path,
         body,
         ctx.context.request_context.get("request"),
     )
+    logger.info("invoke_api tool: %s %s took %.2fs", method, path, time.monotonic() - start)
     response_size = len(json.dumps(result))
     logger.info("invoke_api response size: %d bytes", response_size)
     if response_size > MAX_RESPONSE_SIZE:
@@ -497,8 +525,6 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
         screenshot_url = html_url.replace(".html", ".png")
 
         async def _take_screenshot() -> None:
-            import time
-
             start = time.monotonic()
             try:
                 from playwright.async_api import TimeoutError as PlaywrightTimeoutError

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 from chatkit.server import StreamingResult
@@ -49,7 +50,29 @@ async def log_requests(request: Request, call_next):
     logger.info(
         "%s %s %s %s", ip, request.method, request.url.path, request.headers.get("cf-ipcountry")
     )
-    return await call_next(request)
+    start = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "%s %s failed after %.2fs", request.method, request.url.path, time.monotonic() - start
+        )
+        raise
+    # For streaming responses (e.g. /chatkit's SSE) this is time-to-first-byte,
+    # not total duration -- the body streams after this returns. See the
+    # per-stream timing logged in chatkit_endpoint for the true duration.
+    elapsed = time.monotonic() - start
+    logger.info(
+        "%s %s -> %s in %.2fs", request.method, request.url.path, response.status_code, elapsed
+    )
+    if elapsed > 10:
+        logger.warning(
+            "Slow request: %s %s took %.2fs before response start",
+            request.method,
+            request.url.path,
+            elapsed,
+        )
+    return response
 
 
 def get_chatkit_server() -> TraccarAssistantServer:
@@ -81,13 +104,18 @@ async def proxy_traccar(request: Request, path: str) -> Response:
 
     body = await request.body()
 
-    async with httpx.AsyncClient() as client:
+    start = time.monotonic()
+    async with httpx.AsyncClient(timeout=25) as client:
         resp = await client.request(
             request.method,
             traccar_url,
             headers=headers,
             content=body or None,
         )
+    elapsed = time.monotonic() - start
+    logger.info("%s %s took %.2fs", request.method, traccar_url, elapsed)
+    if elapsed > 5:
+        logger.warning("Slow proxy_traccar: %s %s took %.2fs", request.method, traccar_url, elapsed)
 
     excluded = {"transfer-encoding", "content-encoding", "content-length"}
     resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
@@ -105,7 +133,13 @@ async def get_file(filename: str) -> Response:
 
     task = screenshot_tasks.get(filename)
     if task:
+        wait_start = time.monotonic()
         await task
+        logger.info(
+            "get_file: %s waited %.2fs for pending screenshot task",
+            filename,
+            time.monotonic() - wait_start,
+        )
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Report file not found")
 
@@ -122,14 +156,52 @@ async def get_file(filename: str) -> Response:
         return FileResponse(path=file_path, media_type="application/json", filename=filename)
 
 
+async def _timed_sse_stream(result: StreamingResult, label: str):
+    """Re-yield an SSE stream while logging its true end-to-end duration.
+
+    The `log_requests` middleware only measures time-to-first-byte for a
+    streaming response (it returns as soon as headers are ready, well before
+    the body is fully sent). This is what actually accounts for the whole
+    request lifetime that a Vercel proxy timeout would be measured against.
+    """
+    start = time.monotonic()
+    chunk_count = 0
+    byte_count = 0
+    try:
+        async for chunk in result:
+            chunk_count += 1
+            byte_count += len(chunk)
+            yield chunk
+    except Exception:
+        logger.warning(
+            "%s stream error after %.2fs (%d chunks, %d bytes)",
+            label,
+            time.monotonic() - start,
+            chunk_count,
+            byte_count,
+        )
+        raise
+    else:
+        elapsed = time.monotonic() - start
+        logger.info(
+            "%s stream done: %.2fs, %d chunks, %d bytes", label, elapsed, chunk_count, byte_count
+        )
+        if elapsed > 20:
+            logger.warning("Slow %s stream: %.2fs (%d chunks)", label, elapsed, chunk_count)
+
+
 @app.post("/chatkit")
 async def chatkit_endpoint(
     request: Request, server: TraccarAssistantServer = Depends(get_chatkit_server)
 ) -> Response:
     payload = await request.body()
+    process_start = time.monotonic()
     result = await server.process(payload, {"request": request})
+    logger.info("server.process took %.2fs", time.monotonic() - process_start)
     if isinstance(result, StreamingResult):
-        return StreamingResponse(result, media_type="text/event-stream")
+        return StreamingResponse(
+            _timed_sse_stream(result, "chatkit"), media_type="text/event-stream"
+        )
     if hasattr(result, "json"):
         return Response(content=result.json, media_type="application/json")
     return JSONResponse(result)
