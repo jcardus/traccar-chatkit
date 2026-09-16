@@ -163,31 +163,46 @@ async def _timed_sse_stream(result: StreamingResult, label: str):
     streaming response (it returns as soon as headers are ready, well before
     the body is fully sent). This is what actually accounts for the whole
     request lifetime that a Vercel proxy timeout would be measured against.
+
+    Uses try/finally rather than try/except/else: when a client disconnects
+    (which is exactly what a Vercel proxy timeout looks like from here), the
+    server cancels this generator by throwing GeneratorExit/CancelledError
+    into it -- neither is an Exception subclass, so `except Exception` does
+    not catch it and a plain post-loop log line would never run. finally
+    still runs, so the cancelled case is the one case we most need logged.
     """
     start = time.monotonic()
     chunk_count = 0
     byte_count = 0
+    outcome = "cancelled"
+    logger.info("%s stream starting", label)
     try:
         async for chunk in result:
             chunk_count += 1
             byte_count += len(chunk)
             yield chunk
+        outcome = "done"
     except Exception:
-        logger.warning(
-            "%s stream error after %.2fs (%d chunks, %d bytes)",
+        outcome = "error"
+        raise
+    finally:
+        elapsed = time.monotonic() - start
+        logger.info(
+            "%s stream %s: %.2fs, %d chunks, %d bytes",
             label,
-            time.monotonic() - start,
+            outcome,
+            elapsed,
             chunk_count,
             byte_count,
         )
-        raise
-    else:
-        elapsed = time.monotonic() - start
-        logger.info(
-            "%s stream done: %.2fs, %d chunks, %d bytes", label, elapsed, chunk_count, byte_count
-        )
-        if elapsed > 20:
-            logger.warning("Slow %s stream: %.2fs (%d chunks)", label, elapsed, chunk_count)
+        if outcome != "done" or elapsed > 20:
+            logger.warning(
+                "Slow/incomplete %s stream (%s): %.2fs, %d chunks",
+                label,
+                outcome,
+                elapsed,
+                chunk_count,
+            )
 
 
 @app.post("/chatkit")

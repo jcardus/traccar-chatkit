@@ -350,15 +350,22 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         )
         run_start = time.monotonic()
         event_count = 0
-        async for event in stream_agent_response(agent_context, result):
-            event_count += 1
-            yield event
-        logger.info(
-            "agent run: thread=%s events=%d took %.2fs",
-            thread.id,
-            event_count,
-            time.monotonic() - run_start,
-        )
+        logger.info("agent run starting: thread=%s", thread.id)
+        try:
+            async for event in stream_agent_response(agent_context, result):
+                event_count += 1
+                yield event
+        finally:
+            # finally (not a plain trailing log line) so this still fires if the
+            # client disconnects / the request is cancelled mid-stream -- that
+            # cancellation *is* what a Vercel proxy timeout looks like from here,
+            # and a bare statement after the loop would silently never run.
+            logger.info(
+                "agent run: thread=%s events=%d took %.2fs",
+                thread.id,
+                event_count,
+                time.monotonic() - run_start,
+            )
 
         response_identifier = getattr(result, "last_response_id", None)
         if response_identifier is not None:
