@@ -4,20 +4,66 @@ import {
   CHATKIT_API_DOMAIN_KEY,
 } from "../lib/config";
 import type { ColorScheme } from "../hooks/useColorScheme";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 type ChatKitPanelProps = {
   theme: ColorScheme;
   onShowMap: (invocation) => void;
   onShowHtml: (invocation) => void;
+  onClearPanel: () => void;
 };
+
+type ThreadItem = {
+  type: string;
+  name?: string;
+  status?: string;
+  arguments?: { html_url?: string };
+};
+
+// Reconstructs the map/HTML panel when switching to a past (e.g. archived)
+// thread. show_html client tool calls don't leave a visible thread item of
+// their own, so nothing repopulates the panel by default when you reopen an
+// old conversation -- this fetches the thread's items directly (the same
+// threads.get_by_id op the widget itself uses to load history) and re-shows
+// the last completed show_html call's HTML.
+async function findLastShowHtml(threadId: string): Promise<string | null> {
+  const res = await fetch(CHATKIT_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "threads.get_by_id",
+      params: { thread_id: threadId },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`threads.get_by_id failed: ${res.status}`);
+  }
+  const thread = await res.json();
+  const items: ThreadItem[] = thread?.items?.data ?? [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (
+      item.type === "client_tool_call" &&
+      item.name === "show_html" &&
+      item.status === "completed" &&
+      item.arguments?.html_url
+    ) {
+      return item.arguments.html_url;
+    }
+  }
+  return null;
+}
 
 
 export function ChatKitPanel({
   theme,
   onShowMap,
-  onShowHtml
+  onShowHtml,
+  onClearPanel,
 }: ChatKitPanelProps) {
+  // Guards against a fast thread switch resolving out of order and
+  // clobbering the panel with a stale response.
+  const latestThreadRef = useRef<string | null>(null);
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
@@ -77,7 +123,36 @@ export function ChatKitPanel({
           : { success: true };
       }
       return { success: false };
-    }
+    },
+    onThreadChange: (event: { threadId: string | null }) => {
+      const threadId = event.threadId;
+      latestThreadRef.current = threadId;
+      if (!threadId) {
+        onClearPanel();
+        return;
+      }
+      findLastShowHtml(threadId)
+        .then((htmlUrl) => {
+          if (latestThreadRef.current !== threadId) return; // stale
+          if (!htmlUrl) {
+            onClearPanel();
+            return;
+          }
+          return fetch(htmlUrl)
+            .then((res) => (res.ok ? res.text() : null))
+            .then((html) => {
+              if (latestThreadRef.current !== threadId) return; // stale
+              if (html) {
+                onShowHtml({ params: { html } });
+              } else {
+                onClearPanel();
+              }
+            });
+        })
+        .catch((e) => {
+          console.warn("Failed to restore panel for thread", threadId, e);
+        });
+    },
   });
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
