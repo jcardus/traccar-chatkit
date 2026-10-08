@@ -66,7 +66,27 @@ export function ChatKitPanel({
   const latestThreadRef = useRef<string | null>(null);
 
   const chatkit = useChatKit({
-    api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
+    api: {
+      url: CHATKIT_API_URL,
+      domainKey: CHATKIT_API_DOMAIN_KEY,
+      uploadStrategy: { type: "two_phase" },
+    },
+    composer: {
+      // Keep in sync with ALLOWED_MIME_TYPES / MAX_ATTACHMENT_BYTES in
+      // backend/app/attachments.py.
+      attachments: {
+        enabled: true,
+        maxSize: 20 * 1024 * 1024,
+        maxCount: 5,
+        accept: {
+          "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+          "application/pdf": [".pdf"],
+          "text/csv": [".csv"],
+          "text/plain": [".txt"],
+          "application/json": [".json"],
+        },
+      },
+    },
     theme: {
       colorScheme: theme,
       color: {

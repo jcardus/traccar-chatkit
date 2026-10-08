@@ -26,7 +26,6 @@ from chatkit.server import ChatKitServer, ThreadItemDoneEvent
 from chatkit.types import (
     ClientToolCallItem,
     HiddenContextItem,
-    ImageAttachment,
     ThreadMetadata,
     UserMessageItem,
 )
@@ -38,9 +37,10 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 from pydantic import ConfigDict, Field
 
+from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
-from .traccar import _get_session_id, _get_traccar_url, fleetmap_url, invoke
+from .traccar import _get_session_id, _get_traccar_url, invoke
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -54,7 +54,6 @@ SHOW_HTML_SCREENSHOT_PROMPT: Final[str] = (
     "show_html again with corrected HTML. Otherwise give the user a brief "
     "confirmation of what you rendered."
 )
-REPORTS_DIR: Final[Path] = Path(__file__).parent.parent / "reports"
 # Pending screenshot tasks keyed by filename, so requests can await them
 screenshot_tasks: dict[str, asyncio.Task] = {}
 
@@ -152,17 +151,7 @@ def _save_html_file(
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    # Insert session as a subdomain: https://host -> https://{session}.host
-    from urllib.parse import urlparse, urlunparse
-
-    if traccar_url == fleetmap_url:
-        base_domain = "https://i8ttracker.com.br"
-    else:
-        base_domain = "https://rastreon.net"
-    parsed = urlparse(base_domain)
-    parsed = parsed._replace(netloc=f"{cookie}.{parsed.netloc}")
-    base_url = urlunparse(parsed)
-    url = f"{base_url}/chatkit/{filename}"
+    url = f"{public_base_url(cookie, traccar_url)}/chatkit/{filename}"
     logger.info("Saved HTML: %s", url)
     return url
 
@@ -210,16 +199,10 @@ def _thread_item_done(thread_id: str, item: Any) -> Any:
 
 
 class TraccarThreadItemConverter(ThreadItemConverter):
-    """Converts image attachments to input_image content for the model."""
+    """Inlines uploaded attachments (images, PDFs, text files) into the model input."""
 
     async def attachment_to_message_content(self, attachment) -> ResponseInputContentParam:
-        if isinstance(attachment, ImageAttachment):
-            return ResponseInputImageParam(
-                type="input_image",
-                image_url=str(attachment.preview_url),
-                detail="low",
-            )
-        raise NotImplementedError(f"Unsupported attachment type: {attachment.type}")
+        return attachment_to_input(attachment)
 
     async def client_tool_call_to_input(self, item: ClientToolCallItem):
         """Feed the show_html screenshot back to the model as an image.
@@ -271,7 +254,7 @@ def _user_message_text(item: UserMessageItem) -> str:
 class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
         self.store: NeonStore = NeonStore()
-        super().__init__(self.store)
+        super().__init__(self.store, TraccarAttachmentStore())
         tools = [
             invoke_api,
             show_html,
@@ -368,9 +351,6 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             await self.store.save_thread(thread, context)
 
         return
-
-    async def to_message_content(self, _input) -> ResponseInputContentParam:
-        raise RuntimeError("File attachments are not supported in this demo.")
 
     def _init_thread_item_converter(self) -> Any | None:
         return TraccarThreadItemConverter()
