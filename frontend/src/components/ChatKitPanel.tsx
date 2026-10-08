@@ -79,11 +79,24 @@ export function ChatKitPanel({
         maxSize: 20 * 1024 * 1024,
         maxCount: 5,
         accept: {
-          "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+          "image/png": [".png"],
+          "image/jpeg": [".jpg", ".jpeg"],
+          "image/gif": [".gif"],
+          "image/webp": [".webp"],
           "application/pdf": [".pdf"],
           "text/csv": [".csv"],
           "text/plain": [".txt"],
           "application/json": [".json"],
+          "application/msword": [".doc"],
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            [".docx"],
+          "application/rtf": [".rtf"],
+          "application/vnd.oasis.opendocument.text": [".odt"],
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            [".pptx"],
+          "application/vnd.ms-excel": [".xls"],
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            [".xlsx"],
         },
       },
     },

@@ -37,7 +37,27 @@ ALLOWED_MIME_TYPES: Final[dict[str, str]] = {
     "text/csv": ".csv",
     "text/plain": ".txt",
     "application/json": ".json",
+    # Office documents: passed to the model as input_file. OpenAI extracts the
+    # text of documents and runs a spreadsheet-specific parse on spreadsheets.
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/rtf": ".rtf",
+    "application/vnd.oasis.opendocument.text": ".odt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
 }
+OFFICE_EXTENSIONS: Final[tuple[str, ...]] = (
+    ".doc",
+    ".docx",
+    ".rtf",
+    ".odt",
+    ".pptx",
+    ".xls",
+    ".xlsx",
+)
+# Sent to the model as plain text rather than as a file.
+TEXT_MIME_TYPES: Final[frozenset[str]] = frozenset({"text/csv", "text/plain", "application/json"})
 MAX_ATTACHMENT_BYTES: Final[int] = 20 * 1024 * 1024
 # Text files are inlined into the prompt; cap them so a large CSV can't blow the context.
 MAX_TEXT_CHARS: Final[int] = 100_000
@@ -69,6 +89,9 @@ class TraccarAttachmentStore(AttachmentStore[dict[str, Any]]):
         self, input: AttachmentCreateParams, context: dict[str, Any]
     ) -> Attachment:
         mime_type = input.mime_type.lower()
+        # Browsers on Windows with Excel installed report .csv as application/vnd.ms-excel.
+        if mime_type == "application/vnd.ms-excel" and input.name.lower().endswith(".csv"):
+            mime_type = "text/csv"
         if mime_type not in ALLOWED_MIME_TYPES:
             raise ValueError(f"Unsupported attachment type: {input.mime_type}")
         if input.size > MAX_ATTACHMENT_BYTES:
@@ -121,12 +144,12 @@ def attachment_to_input(attachment: Attachment) -> ResponseInputContentParam:
             image_url=f"data:{attachment.mime_type};base64,{encoded}",
             detail="auto",
         )
-    if attachment.mime_type == "application/pdf":
+    if attachment.mime_type not in TEXT_MIME_TYPES:
         encoded = base64.b64encode(data).decode()
         return ResponseInputFileParam(
             type="input_file",
             filename=attachment.name,
-            file_data=f"data:application/pdf;base64,{encoded}",
+            file_data=f"data:{attachment.mime_type};base64,{encoded}",
         )
 
     text = data.decode("utf-8", errors="replace")
