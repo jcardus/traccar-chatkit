@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.responses import JSONResponse
 
-from .attachments import MAX_ATTACHMENT_BYTES, attachment_path
+from .attachments import MAX_ATTACHMENT_BYTES, OFFICE_EXTENSIONS, attachment_path
 from .chat import (
     REPORTS_DIR,
     TraccarAssistantServer,
@@ -154,6 +154,15 @@ async def get_file(filename: str) -> Response:
         return Response(content=content, media_type="text/html")
     elif filename.endswith(".png"):
         return FileResponse(path=file_path, media_type="image/png")
+    elif filename.endswith(OFFICE_EXTENSIONS):
+        # Office uploads are never rendered inline; always download them.
+        media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return FileResponse(
+            path=file_path,
+            media_type=media_type,
+            filename=filename,
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
     elif not filename.endswith(".json"):
         media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
         return FileResponse(path=file_path, media_type=media_type)
