@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 import time
 
 import httpx
 from chatkit.server import StreamingResult
+from chatkit.store import NotFoundError
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.responses import JSONResponse
 
+from .attachments import MAX_ATTACHMENT_BYTES, attachment_path
 from .chat import (
     REPORTS_DIR,
     TraccarAssistantServer,
@@ -151,9 +154,39 @@ async def get_file(filename: str) -> Response:
         return Response(content=content, media_type="text/html")
     elif filename.endswith(".png"):
         return FileResponse(path=file_path, media_type="image/png")
+    elif not filename.endswith(".json"):
+        media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return FileResponse(path=file_path, media_type=media_type)
     else:
         # Serve JSON files
         return FileResponse(path=file_path, media_type="application/json", filename=filename)
+
+
+@app.put("/chatkit/attachments/{attachment_id}")
+async def upload_attachment(
+    attachment_id: str,
+    request: Request,
+    server: TraccarAssistantServer = Depends(get_chatkit_server),
+) -> Response:
+    """Second phase of a two-phase upload: the client PUTs the raw file bytes here."""
+    try:
+        attachment = await server.store.load_attachment(attachment_id, {"request": request})
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    file_path = attachment_path(attachment.id, attachment.mime_type)
+    # Each attachment id is uploaded exactly once; never let a later PUT overwrite it.
+    if file_path.exists():
+        raise HTTPException(status_code=409, detail="Attachment already uploaded")
+
+    data = await request.body()
+    if len(data) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=413, detail="Attachment too large")
+
+    file_path.parent.mkdir(exist_ok=True)
+    file_path.write_bytes(data)
+    logger.info("Uploaded attachment %s (%d bytes)", file_path.name, len(data))
+    return Response(status_code=204)
 
 
 async def _timed_sse_stream(result: StreamingResult, label: str):
