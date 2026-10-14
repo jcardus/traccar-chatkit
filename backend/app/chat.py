@@ -588,26 +588,49 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
 
 @function_tool(description_override="Forward the user question to a real agent.")
 async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], question: str) -> str:
-    logger.info("forward_to_real_agent")
     """Send the user's question to support via email."""
     request = ctx.context.request_context.get("request")
-    session = invoke("get", "session", "", request) if request else None
-    user_email = session.get("email") if session else "unknown"
     thread_id = ctx.context.thread.id
+    logger.info(
+        "Support forwarding started: thread=%s question_length=%d request_present=%s",
+        thread_id,
+        len(question),
+        request is not None,
+    )
 
-    ses = boto3.client("ses", region_name="eu-west-1")
-    ses.send_email(
-        Source="support@fleetmap.io",
-        Destination={"ToAddresses": ["support@fleetmap.io"]},
-        Message={
-            "Subject": {"Data": f"Support request from {user_email}"},
-            "Body": {
-                "Text": {
-                    "Data": f"User: {user_email}\nThread: {thread_id}\n\nQuestion:\n{question}"
+    try:
+        session = invoke("get", "session", "", request) if request else None
+        user_email = session.get("email") if session else "unknown"
+        logger.info(
+            "Support forwarding context loaded: thread=%s user_email_present=%s",
+            thread_id,
+            user_email != "unknown",
+        )
+
+        ses = boto3.client("ses", region_name="eu-west-1")
+        response = ses.send_email(
+            Source="support@fleetmap.io",
+            Destination={"ToAddresses": ["support@fleetmap.io"]},
+            Message={
+                "Subject": {"Data": f"Support request from {user_email}"},
+                "Body": {
+                    "Text": {
+                        "Data": f"User: {user_email}\nThread: {thread_id}\n\nQuestion:\n{question}"
+                    }
                 }
             },
-        },
-    )
+        )
+        response_metadata = response.get("ResponseMetadata", {})
+        logger.info(
+            "Support forwarding accepted by SES: thread=%s message_id=%s http_status=%s",
+            thread_id,
+            response.get("MessageId"),
+            response_metadata.get("HTTPStatusCode"),
+        )
+    except Exception:
+        logger.exception("Support forwarding failed: thread=%s", thread_id)
+        raise
+
     return "Your question has been forwarded to our support team. They will get back to you soon."
 
 
