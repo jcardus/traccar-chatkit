@@ -87,6 +87,7 @@ def invoke(method, path, body, request):
 
     parsed_body = json_module.loads(body) if body else None
     start = time.monotonic()
+    status_code: int | str = "no response"
     try:
         response = requests.request(
             method.upper(),
@@ -95,10 +96,17 @@ def invoke(method, path, body, request):
             json=parsed_body,
             timeout=TRACCAR_REQUEST_TIMEOUT,
         )
+        status_code = response.status_code
         response.raise_for_status()
         return response.json()
     finally:
         elapsed = time.monotonic() - start
-        logger.info("%s %s took %.2fs", method.upper(), url, elapsed)
+        logger.info("%s %s -> %s took %.2fs", method.upper(), url, status_code, elapsed)
         if elapsed > 5:
-            logger.warning("Slow Traccar request: %s %s took %.2fs", method.upper(), url, elapsed)
+            logger.warning(
+                "Slow Traccar request: %s %s -> %s took %.2fs",
+                method.upper(),
+                url,
+                status_code,
+                elapsed,
+            )

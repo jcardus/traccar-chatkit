@@ -112,6 +112,7 @@ dev = [
     { name = "mypy" },
     { name = "openai-chatkit" },
     { name = "ruff" },
+    { name = "types-requests" },
 ]
 
 [package.metadata]
@@ -128,6 +129,7 @@ requires-dist = [
     { name = "psycopg-pool", specifier = ">=3.2,<4" },
     { name = "requests" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.4,<0.7" },
+    { name = "types-requests", marker = "extra == 'dev'" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.36,<0.37" },
 ]
 provides-extras = ["dev"]
