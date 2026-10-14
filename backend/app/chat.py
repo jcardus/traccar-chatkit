@@ -455,7 +455,7 @@ async def invoke_api(
     ctx: RunContextWrapper[TraccarAgentContext],
     method: str,
     path: str,
-    body: str,
+    body: str = "",
 ):
     start = time.monotonic()
     result = invoke(

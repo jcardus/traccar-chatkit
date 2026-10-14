@@ -76,22 +76,23 @@ def invoke(method, path, body, request):
     """Generic API invocation with an arbitrary JSON body string."""
     import json as json_module
 
+    method = method.upper()
     cookie = _get_cookie(request)
     headers = {"Cookie": cookie, "Accept": "application/json"}
-    if method.upper() in ("POST", "PUT"):
+    if method in ("POST", "PUT"):
         headers["Content-Type"] = "application/json"
 
     url = f"{_get_traccar_url(request).rstrip('/')}/api/{path.lstrip('/')}"
+    parsed_body = json_module.loads(body) if body and method != "GET" else None
 
-    logger.info("%s %s %s cookie=%s", method.upper(), url, body, cookie)
+    logger.info("%s %s body=%s cookie=%s", method, url, parsed_body, cookie)
 
-    parsed_body = json_module.loads(body) if body else None
     start = time.monotonic()
     status_code: int | str = "no response"
     response_chain = "no response"
     try:
         response = requests.request(
-            method.upper(),
+            method,
             url,
             headers=headers,
             json=parsed_body,
@@ -107,7 +108,7 @@ def invoke(method, path, body, request):
         elapsed = time.monotonic() - start
         logger.info(
             "%s %s -> %s (response chain: %s) took %.2fs cookie=%s",
-            method.upper(),
+            method,
             url,
             status_code,
             response_chain,
@@ -117,7 +118,7 @@ def invoke(method, path, body, request):
         if elapsed > 5:
             logger.warning(
                 "Slow Traccar request: %s %s -> %s (response chain: %s) took %.2fs cookie=%s",
-                method.upper(),
+                method,
                 url,
                 status_code,
                 response_chain,
