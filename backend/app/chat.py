@@ -617,7 +617,7 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
                     "Text": {
                         "Data": f"User: {user_email}\nThread: {thread_id}\n\nQuestion:\n{question}"
                     }
-                }
+                },
             },
         )
         response_metadata = response.get("ResponseMetadata", {})
