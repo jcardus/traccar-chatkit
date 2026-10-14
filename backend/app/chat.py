@@ -24,6 +24,7 @@ from chatkit.agents import (
 )
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
 from chatkit.types import (
+    AssistantMessageItem,
     ClientToolCallItem,
     HiddenContextItem,
     ThreadMetadata,
@@ -608,6 +609,7 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
         )
 
         ses = boto3.client("ses", region_name="us-east-1")
+        conversation = await _format_support_thread(ctx, question)
         response = ses.send_email(
             Source="support@gpsmanager.io",
             Destination={"ToAddresses": ["support@fleetmap.io"]},
@@ -615,9 +617,12 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
                 "Subject": {"Data": f"Support request from {user_email}"},
                 "Body": {
                     "Text": {
-                        "Data": f"User: {user_email}\nThread: {thread_id}\n\nQuestion:\n{question}"
+                        "Data": (
+                            f"User: {user_email}\nThread: {thread_id}\n\n"
+                            f"Conversation:\n{conversation}"
+                        )
                     }
-                }
+                },
             },
         )
         response_metadata = response.get("ResponseMetadata", {})
@@ -632,6 +637,44 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
         raise
 
     return "Your question has been forwarded to our support team. They will get back to you soon."
+
+
+async def _format_support_thread(ctx: RunContextWrapper[TraccarAgentContext], question: str) -> str:
+    thread_id = ctx.context.thread.id
+    context = ctx.context.request_context
+    after = None
+    messages: list[str] = []
+
+    while True:
+        page = await ctx.context.store.load_thread_items(thread_id, after, 100, "asc", context)
+        for item in page.data:
+            if isinstance(item, UserMessageItem):
+                text = _user_message_text(item)
+                attachment_names = [attachment.name for attachment in item.attachments]
+                if attachment_names:
+                    attachment_list = ", ".join(attachment_names)
+                    text = (
+                        f"{text}\nAttachments: {attachment_list}"
+                        if text
+                        else (f"Attachments: {attachment_list}")
+                    )
+                role = "User"
+            elif isinstance(item, AssistantMessageItem):
+                text = "\n".join(part.text for part in item.content if getattr(part, "text", None))
+                role = "Assistant"
+            else:
+                continue
+
+            if text:
+                messages.append(f"[{item.created_at.isoformat()}] {role}:\n{text}")
+
+        if not page.has_more:
+            break
+        if not page.after or page.after == after:
+            raise RuntimeError(f"Could not paginate support thread {thread_id}")
+        after = page.after
+
+    return "\n\n".join(messages) or f"[Current request]\nUser:\n{question}"
 
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
