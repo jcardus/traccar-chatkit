@@ -609,7 +609,7 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
 
         ses = boto3.client("ses", region_name="us-east-1")
         response = ses.send_email(
-            Source="support@fleetmap.io",
+            Source="support@gpsmanager.io",
             Destination={"ToAddresses": ["support@fleetmap.io"]},
             Message={
                 "Subject": {"Data": f"Support request from {user_email}"},
