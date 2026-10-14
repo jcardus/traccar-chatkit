@@ -258,6 +258,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         tools = [
             invoke_api,
             show_html,
+            forward_to_real_agent,
             get_map_template,
             get_openapi_yaml,
         ]
