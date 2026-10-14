@@ -116,14 +116,22 @@ async def proxy_traccar(request: Request, path: str) -> Response:
             content=body or None,
         )
     elapsed = time.monotonic() - start
-    logger.info("%s %s -> %s took %.2fs", request.method, traccar_url, resp.status_code, elapsed)
+    logger.info(
+        "%s %s -> %s took %.2fs cookie=%s",
+        request.method,
+        traccar_url,
+        resp.status_code,
+        elapsed,
+        cookie,
+    )
     if elapsed > 5:
         logger.warning(
-            "Slow proxy_traccar: %s %s -> %s took %.2fs",
+            "Slow proxy_traccar: %s %s -> %s took %.2fs cookie=%s",
             request.method,
             traccar_url,
             resp.status_code,
             elapsed,
+            cookie,
         )
 
     excluded = {"transfer-encoding", "content-encoding", "content-length"}

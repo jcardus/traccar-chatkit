@@ -83,7 +83,7 @@ def invoke(method, path, body, request):
 
     url = f"{_get_traccar_url(request).rstrip('/')}/api/{path.lstrip('/')}"
 
-    logger.info("%s %s %s", method.upper(), url, body)
+    logger.info("%s %s %s cookie=%s", method.upper(), url, body, cookie)
 
     parsed_body = json_module.loads(body) if body else None
     start = time.monotonic()
@@ -101,12 +101,20 @@ def invoke(method, path, body, request):
         return response.json()
     finally:
         elapsed = time.monotonic() - start
-        logger.info("%s %s -> %s took %.2fs", method.upper(), url, status_code, elapsed)
+        logger.info(
+            "%s %s -> %s took %.2fs cookie=%s",
+            method.upper(),
+            url,
+            status_code,
+            elapsed,
+            cookie,
+        )
         if elapsed > 5:
             logger.warning(
-                "Slow Traccar request: %s %s -> %s took %.2fs",
+                "Slow Traccar request: %s %s -> %s took %.2fs cookie=%s",
                 method.upper(),
                 url,
                 status_code,
                 elapsed,
+                cookie,
             )
