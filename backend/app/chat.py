@@ -258,6 +258,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         tools = [
             invoke_api,
             show_html,
+            forward_to_real_agent,
             get_map_template,
             get_openapi_yaml,
         ]
@@ -607,7 +608,10 @@ async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], que
             },
         },
     )
-    return "Your question has been forwarded to our support team. They will get back to you soon."
+    return (
+        "Sua solicitação foi encaminhada à equipe de suporte. "
+        "O canal e o prazo de retorno ainda não estão confirmados."
+    )
 
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
