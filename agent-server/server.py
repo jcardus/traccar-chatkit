@@ -251,14 +251,17 @@ def parse_agent_output(
 def run_claude(cfg: Config, prompt: str) -> tuple[str, str, int]:
     """Run headless Claude once; returns (stdout, stderr, returncode).
 
-    Raises subprocess.TimeoutExpired when the run exceeds cfg.claude_timeout.
+    The prompt goes over stdin, never argv: flag grammars differ across CLI
+    versions, and a greedy multi-value flag could otherwise swallow a trailing
+    prompt argument. Raises subprocess.TimeoutExpired past cfg.claude_timeout.
     """
-    cmd = [*cfg.claude_cmd, *cfg.claude_args, prompt]
+    cmd = [*cfg.claude_cmd, *cfg.claude_args]
     proc = subprocess.run(
         cmd,
         cwd=cfg.workdir,
         capture_output=True,
         text=True,
+        input=prompt,
         timeout=cfg.claude_timeout,
     )
     return proc.stdout, proc.stderr, proc.returncode

@@ -81,7 +81,7 @@ Service (`agent.env` / environment):
 | `AGENT_BIND` / `AGENT_PORT` | `127.0.0.1` / `8765` | Listen address |
 | `AGENT_WORKDIR` | `~/freescout-ticket-solver` | cwd for runs (so `bin/fs_*.sh` resolve) |
 | `AGENT_REPOS_DIR` | `~/repos` | Codebase path given to the agent |
-| `CLAUDE_CMD` / `CLAUDE_ARGS` | `claude` / see §3 | Headless CLI invocation (prompt is appended as final arg) |
+| `CLAUDE_CMD` / `CLAUDE_ARGS` | `claude` / see §3 | Headless CLI invocation (prompt is piped over stdin) |
 | `CLAUDE_TIMEOUT` | `100` (s) | Per-run kill deadline; keep below the backend timeout |
 | `AGENT_MAX_CONCURRENT` | `2` | Simultaneous runs; excess gets `503 busy` |
 | `AGENT_MAX_BODY` / `AGENT_MAX_CONTEXT` / `AGENT_MAX_ANSWER` | `204800` / `60000` / `8000` | Request cap / transcript tail kept / answer cap (chars) |
