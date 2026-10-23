@@ -43,4 +43,4 @@ Remember GeoJSON coordinates are [longitude, latitude], not [latitude, longitude
 """
 
 
-MODEL = "gpt-5.6-luna"
+MODEL = "gpt-6-luna"
