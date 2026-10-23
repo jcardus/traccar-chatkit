@@ -1,0 +1,20 @@
+[Unit]
+Description=Live-answer agent server for the chat assistant
+After=network.target
+
+[Service]
+Type=simple
+User=ticketbot
+WorkingDirectory=%h/freescout-ticket-solver
+EnvironmentFile=%h/agent-server/agent.env
+ExecStart=/usr/bin/python3 %h/agent-server/server.py
+Restart=on-failure
+RestartSec=5
+# The CLI needs normal home-dir access (auth, state, repos); keep sandboxing
+# minimal. Further lockdown (ProtectSystem/ProtectHome) is possible once the
+# CLI's write paths on this box are known.
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

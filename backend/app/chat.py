@@ -11,36 +11,25 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator, Final, cast
+from typing import Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
-import boto3
 from agents import Agent, RunContextWrapper, Runner, function_tool
-from chatkit.agents import (
-    AgentContext,
-    ClientToolCall,
-    ThreadItemConverter,
-    stream_agent_response,
-)
+from chatkit.agents import ClientToolCall, ThreadItemConverter, stream_agent_response
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
-from chatkit.types import (
-    AssistantMessageItem,
-    ClientToolCallItem,
-    HiddenContextItem,
-    ThreadMetadata,
-    UserMessageItem,
-)
+from chatkit.types import ClientToolCallItem, HiddenContextItem, ThreadMetadata, UserMessageItem
 from openai.types.responses import (
     EasyInputMessageParam,
     ResponseInputContentParam,
     ResponseInputTextParam,
 )
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
-from pydantic import ConfigDict, Field
 
+from .agent_context import TraccarAgentContext
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
+from .support import _user_message_text, ask_support_specialist, forward_to_real_agent
 from .traccar import _get_session_id, _get_traccar_url, invoke
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -237,21 +226,6 @@ class TraccarThreadItemConverter(ThreadItemConverter):
         return await super().client_tool_call_to_input(item)
 
 
-class TraccarAgentContext(AgentContext):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    store: Annotated[NeonStore, Field(exclude=True)]
-    request_context: dict[str, Any]
-
-
-def _user_message_text(item: UserMessageItem) -> str:
-    parts: list[str] = []
-    for part in item.content:
-        text = getattr(part, "text", None)
-        if text:
-            parts.append(text)
-    return " ".join(parts).strip()
-
-
 class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
     def __init__(self) -> None:
         self.store: NeonStore = NeonStore()
@@ -259,6 +233,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         tools = [
             invoke_api,
             show_html,
+            ask_support_specialist,
             forward_to_real_agent,
             get_map_template,
             get_openapi_yaml,
@@ -585,96 +560,6 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
     except Exception:
         logger.exception("show_html failed")
         return {"error": "Internal error rendering HTML"}
-
-
-@function_tool(description_override="Forward the user question to a real agent.")
-async def forward_to_real_agent(ctx: RunContextWrapper[TraccarAgentContext], question: str) -> str:
-    """Send the user's question to support via email."""
-    request = ctx.context.request_context.get("request")
-    thread_id = ctx.context.thread.id
-    logger.info(
-        "Support forwarding started: thread=%s question_length=%d request_present=%s",
-        thread_id,
-        len(question),
-        request is not None,
-    )
-
-    try:
-        session = invoke("get", "session", "", request) if request else None
-        user_email = session.get("email") if session else "unknown"
-        logger.info(
-            "Support forwarding context loaded: thread=%s user_email_present=%s",
-            thread_id,
-            user_email != "unknown",
-        )
-
-        ses = boto3.client("ses", region_name="us-east-1")
-        conversation = await _format_support_thread(ctx, question)
-        response = ses.send_email(
-            Source="support@gpsmanager.io",
-            Destination={"ToAddresses": ["support@fleetmap.io"]},
-            Message={
-                "Subject": {"Data": f"Support request from {user_email}"},
-                "Body": {
-                    "Text": {
-                        "Data": (
-                            f"User: {user_email}\nThread: {thread_id}\n\n"
-                            f"Conversation:\n{conversation}"
-                        )
-                    }
-                },
-            },
-        )
-        response_metadata = response.get("ResponseMetadata", {})
-        logger.info(
-            "Support forwarding accepted by SES: thread=%s message_id=%s http_status=%s",
-            thread_id,
-            response.get("MessageId"),
-            response_metadata.get("HTTPStatusCode"),
-        )
-    except Exception:
-        logger.exception("Support forwarding failed: thread=%s", thread_id)
-        raise
-
-    return "Your question has been forwarded to our support team. They will get back to you soon."
-
-
-async def _format_support_thread(ctx: RunContextWrapper[TraccarAgentContext], question: str) -> str:
-    thread_id = ctx.context.thread.id
-    context = ctx.context.request_context
-    after = None
-    messages: list[str] = []
-
-    while True:
-        page = await ctx.context.store.load_thread_items(thread_id, after, 100, "asc", context)
-        for item in page.data:
-            if isinstance(item, UserMessageItem):
-                text = _user_message_text(item)
-                attachment_names = [attachment.name for attachment in item.attachments]
-                if attachment_names:
-                    attachment_list = ", ".join(attachment_names)
-                    text = (
-                        f"{text}\nAttachments: {attachment_list}"
-                        if text
-                        else (f"Attachments: {attachment_list}")
-                    )
-                role = "User"
-            elif isinstance(item, AssistantMessageItem):
-                text = "\n".join(part.text for part in item.content if getattr(part, "text", None))
-                role = "Assistant"
-            else:
-                continue
-
-            if text:
-                messages.append(f"[{item.created_at.isoformat()}] {role}:\n{text}")
-
-        if not page.has_more:
-            break
-        if not page.after or page.after == after:
-            raise RuntimeError(f"Could not paginate support thread {thread_id}")
-        after = page.after
-
-    return "\n\n".join(messages) or f"[Current request]\nUser:\n{question}"
 
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")

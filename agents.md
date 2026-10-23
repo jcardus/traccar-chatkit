@@ -46,3 +46,23 @@ This document explains how to customize the ChatKit starter template that lives 
      ```
    - When deploying, register your dev or production domain at [platform.openai.com/settings/organization/security/domain-allowlist](https://platform.openai.com/settings/organization/security/domain-allowlist) and replace the placeholder with the generated `domain_pk_...` value.
    - Mirror the domain inside `frontend/vite.config.ts` by adding it to `server.allowedHosts`.
+
+---
+
+## Support escalation (chat -> specialist agent)
+
+Platform-UI questions the chat assistant can't answer go through two tools
+(`backend/app/support.py`), in order: `ask_support_specialist` POSTs the question
+plus the chat transcript to the live-answer agent server on the ticketbot box
+and relays the returned answer to the user. If the specialist is unreachable
+or declines (`needs_human`), the model escalates with `forward_to_real_agent`,
+which emails the question and transcript to the human support team.
+
+Backend env: `CLAUDE_AGENT_URL` (full service URL incl. `/ask`),
+`CLAUDE_AGENT_API_KEY`, `CLAUDE_AGENT_TIMEOUT` (seconds, default 120),
+`SUPPORT_CONTACT_EMAIL` (default `support@fleetmap.io`).
+
+The ticketbot-side service lives in `agent-server/` (stdlib-only `server.py` +
+systemd unit); see `agent-server/README.md` for deploy instructions. Tests:
+`uv run python -m unittest discover -s tests` (backend),
+`python3 test_server.py` (agent-server).
