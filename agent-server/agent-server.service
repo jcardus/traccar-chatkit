@@ -5,9 +5,11 @@ After=network.target
 [Service]
 Type=simple
 User=ticketbot
-WorkingDirectory=%h/freescout-ticket-solver
-EnvironmentFile=%h/agent-server/agent.env
-ExecStart=/usr/bin/python3 %h/agent-server/server.py
+# NOTE: paths are absolute on purpose -- in system units %h always expands to
+# /root, not to the User= home, so %h must not be used here.
+WorkingDirectory=/home/ticketbot/freescout-ticket-solver
+EnvironmentFile=/home/ticketbot/agent-server/agent.env
+ExecStart=/usr/bin/python3 /home/ticketbot/agent-server/server.py
 Restart=on-failure
 RestartSec=5
 # The CLI needs normal home-dir access (auth, state, repos); keep sandboxing
