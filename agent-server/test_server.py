@@ -95,6 +95,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.port, 8765)
         self.assertEqual(cfg.claude_timeout, 100.0)
 
+    def test_log_level(self):
+        self.assertEqual(server.load_config({}).log_level, "INFO")
+        self.assertEqual(
+            server.load_config({"AGENT_LOG_LEVEL": "debug"}).log_level, "DEBUG"
+        )
+        self.assertEqual(
+            server.load_config({"AGENT_LOG_LEVEL": "verbose"}).log_level, "INFO"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

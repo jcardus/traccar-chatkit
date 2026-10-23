@@ -93,6 +93,7 @@ class Config:
     bind: str
     port: int
     api_key: str
+    log_level: str
     workdir: str
     repos_dir: str
     claude_cmd: list[str]
@@ -120,6 +121,11 @@ def _env_float(env: Any, name: str, default: float) -> float:
     return value if value > 0 else default
 
 
+def _env_log_level(env: Any) -> str:
+    level = str(env.get("AGENT_LOG_LEVEL", "INFO")).strip().upper()
+    return level if level in ("DEBUG", "INFO", "WARNING", "ERROR") else "INFO"
+
+
 def load_config(env: Any = None) -> Config:
     """Build config from a mapping (defaults to os.environ)."""
     if env is None:
@@ -128,6 +134,7 @@ def load_config(env: Any = None) -> Config:
         bind=env.get("AGENT_BIND", "127.0.0.1").strip() or "127.0.0.1",
         port=_env_int(env, "AGENT_PORT", 8765),
         api_key=env.get("AGENT_API_KEY", "").strip(),
+        log_level=_env_log_level(env),
         workdir=os.path.expanduser(
             env.get("AGENT_WORKDIR", "~/freescout-ticket-solver")
         ),
@@ -284,6 +291,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         cfg = self.config
         if not is_authorized(self.headers.get("Authorization"), cfg.api_key):
+            logger.info("rejected: unauthorized request from %s", self.address_string())
             self._send_json(401, {"error": "unauthorized"})
             return
         try:
@@ -314,8 +322,16 @@ class Handler(BaseHTTPRequestHandler):
         conversation = conversation if isinstance(conversation, str) else ""
         thread_id = str(payload.get("thread_id") or "")
         user_email = str(payload.get("user_email") or "")
+        logger.debug(
+            "request: thread=%s qlen=%d clen=%d email_set=%s",
+            thread_id,
+            len(question),
+            len(conversation),
+            bool(user_email),
+        )
 
         if not self.slots.acquire(blocking=False):
+            logger.info("rejected: busy thread=%s", thread_id)
             self._send_json(503, {"error": "busy, retry shortly"})
             return
         start = time.monotonic()
@@ -327,6 +343,13 @@ class Handler(BaseHTTPRequestHandler):
                 cfg.workdir,
                 cfg.repos_dir,
                 int(cfg.claude_timeout),
+            )
+            logger.debug(
+                "run start: thread=%s cmd=%s prompt_chars=%d cwd=%s",
+                thread_id,
+                [*cfg.claude_cmd, *cfg.claude_args],
+                len(prompt),
+                cfg.workdir,
             )
             try:
                 stdout, stderr, returncode = run_claude(cfg, prompt)
@@ -342,6 +365,13 @@ class Handler(BaseHTTPRequestHandler):
                 logger.exception("agent failed to start: thread=%s", thread_id)
                 self._send_json(502, {"error": f"agent failed to start: {exc}"})
                 return
+            logger.debug(
+                "run done: thread=%s exit=%s stdout_chars=%d stderr_chars=%d",
+                thread_id,
+                returncode,
+                len(stdout or ""),
+                len(stderr or ""),
+            )
             answer, needs_human, confidence = parse_agent_output(stdout, cfg.max_answer)
             elapsed = time.monotonic() - start
             if answer is None and not needs_human:
@@ -352,6 +382,7 @@ class Handler(BaseHTTPRequestHandler):
                     elapsed,
                     (stderr or "").strip(),
                 )
+                logger.debug("no answer stdout=%.1000s", (stdout or "").strip())
                 self._send_json(502, {"error": "agent returned no answer"})
                 return
             logger.info(
@@ -379,10 +410,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
     cfg = load_config()
+    logging.basicConfig(
+        level=getattr(logging, cfg.log_level, logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
     if not cfg.api_key:
         print(
             "AGENT_API_KEY is required (fail closed). Generate one, e.g.: "
@@ -397,12 +429,24 @@ def main() -> int:
     Handler.slots = threading.BoundedSemaphore(cfg.max_concurrent)
     server = ThreadingHTTPServer((cfg.bind, cfg.port), Handler)
     logger.info(
-        "listening on %s:%d workdir=%s max_concurrent=%d claude_timeout=%.0fs",
+        "listening on %s:%d workdir=%s max_concurrent=%d claude_timeout=%.0fs log_level=%s",
         cfg.bind,
         cfg.port,
         cfg.workdir,
         cfg.max_concurrent,
         cfg.claude_timeout,
+        cfg.log_level,
+    )
+    logger.debug(
+        "config: repos_dir=%s claude_cmd=%s claude_args=%s max_body=%d max_context=%d "
+        "max_answer=%d api_key_set=%s",
+        cfg.repos_dir,
+        cfg.claude_cmd,
+        cfg.claude_args,
+        cfg.max_body,
+        cfg.max_context,
+        cfg.max_answer,
+        bool(cfg.api_key),
     )
     try:
         server.serve_forever()

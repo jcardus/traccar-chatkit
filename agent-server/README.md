@@ -77,6 +77,7 @@ Service (`agent.env` / environment):
 | Var | Default | Meaning |
 |---|---|---|
 | `AGENT_API_KEY` | (required, fail closed) | Bearer key; must match the backend's `CLAUDE_AGENT_API_KEY` |
+| `AGENT_LOG_LEVEL` | `INFO` | `DEBUG` adds per-request detail: sizes, CLI argv, exit codes, agent output tails |
 | `AGENT_BIND` / `AGENT_PORT` | `127.0.0.1` / `8765` | Listen address |
 | `AGENT_WORKDIR` | `~/freescout-ticket-solver` | cwd for runs (so `bin/fs_*.sh` resolve) |
 | `AGENT_REPOS_DIR` | `~/repos` | Codebase path given to the agent |
@@ -132,4 +133,6 @@ sensitive topics via `needs_human`.
 | Answers ignore the JSON contract | Older CLI without `--output-format json`; service falls back to raw text (low confidence) — still verify flags per §3 |
 
 Logs (`journalctl -u agent-server`) record one line per request (outcome,
-duration, sizes) and never the question text or user email.
+duration, sizes) and never the question text or user email. Set
+`AGENT_LOG_LEVEL=DEBUG` in `agent.env` and restart for troubleshooting detail;
+even at DEBUG, logs never include the question text, user email, or API key.
