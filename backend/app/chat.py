@@ -425,13 +425,15 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
 
 
 MAX_RESPONSE_SIZE: Final[int] = 1_000_000
+# Total invoke_api bytes returned raw within one turn, so many smaller calls can't add up past it.
+MAX_TURN_RESULT_BYTES: Final[int] = 1_500_000
 # Cap on the sample records included when a result is too large to return in full.
 SAMPLE_MAX_BYTES: Final[int] = 4000
 SAMPLE_MAX_ITEMS: Final[int] = 3
 
 
 def _summarize_large_result(
-    result: Any, size: int, stored: dict[str, str] | None = None
+    result: Any, size: int, stored: dict[str, str] | None = None, reason: str | None = None
 ) -> dict[str, Any]:
     """Describe an oversized API result without returning the data itself.
 
@@ -440,7 +442,7 @@ def _summarize_large_result(
     """
     summary: dict[str, Any] = {
         "truncated": True,
-        "reason": f"Response too large ({size} bytes) to return in full.",
+        "reason": reason or f"Response too large ({size} bytes) to return in full.",
     }
     if isinstance(result, list):
         summary["total_items"] = len(result)
@@ -488,10 +490,24 @@ async def invoke_api(
     logger.info("invoke_api tool: %s %s took %.2fs", method, path, time.monotonic() - start)
     response_size = len(json.dumps(result))
     logger.info("invoke_api response size: %d bytes", response_size)
-    if response_size > MAX_RESPONSE_SIZE:
-        logger.warning("Response too large: %d bytes, limit: %d", response_size, MAX_RESPONSE_SIZE)
+    over_turn_budget = ctx.context.tool_result_bytes + response_size > MAX_TURN_RESULT_BYTES
+    if response_size > MAX_RESPONSE_SIZE or over_turn_budget:
+        logger.warning(
+            "Response too large: %d bytes (limit %d, turn total %d of %d)",
+            response_size,
+            MAX_RESPONSE_SIZE,
+            ctx.context.tool_result_bytes,
+            MAX_TURN_RESULT_BYTES,
+        )
+        reason = None
+        if response_size <= MAX_RESPONSE_SIZE:
+            reason = (
+                f"Too much data already returned this turn ({response_size} more bytes would "
+                "exceed the budget). Do not split a range into many requests."
+            )
         stored = await store_result(result)
-        return _summarize_large_result(result, response_size, stored)
+        return _summarize_large_result(result, response_size, stored, reason)
+    ctx.context.tool_result_bytes += response_size
     return result
 
 

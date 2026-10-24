@@ -19,6 +19,7 @@ API
 --------
 You have a traccar API available, use the `get_openapi_yaml` tool to retrieve it's specification.
 To invoke the api call the invoke_api tool.
+Do not split a long date range into several requests (for example one per day) to keep results small: every piece lands in the conversation and can overflow it. Request the whole range in one call; if the result is large it is stored automatically and you can compute over it with analyze_data.
 
 RENDERING HTML
 -------
