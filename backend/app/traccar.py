@@ -14,7 +14,7 @@ TRACCAR_REQUEST_TIMEOUT = 25
 
 def _get_traccar_url(request):
     origin = request.headers.get("origin") if request and hasattr(request, "headers") else None
-    logger.info("Request origin: %s", origin)
+    logger.debug("Request origin: %s", origin)
     fleetmap_origins = [
         "https://moviflotte.com",
         "https://localizalia.net",
@@ -85,7 +85,7 @@ def invoke(method, path, body, request):
     url = f"{_get_traccar_url(request).rstrip('/')}/api/{path.lstrip('/')}"
     parsed_body = json_module.loads(body) if body and method != "GET" else None
 
-    logger.info("%s %s body=%s cookie=%s", method, url, parsed_body, cookie)
+    logger.debug("%s %s body=%s", method, url, parsed_body)
 
     start = time.monotonic()
     status_code: int | str = "no response"
@@ -106,22 +106,18 @@ def invoke(method, path, body, request):
         return response.json()
     finally:
         elapsed = time.monotonic() - start
-        logger.info(
-            "%s %s -> %s (response chain: %s) took %.2fs cookie=%s",
+        if elapsed > 5:
+            level = logging.WARNING
+        elif not str(status_code).startswith("2"):
+            level = logging.INFO
+        else:
+            level = logging.DEBUG
+        logger.log(
+            level,
+            "%s %s -> %s (response chain: %s) took %.2fs",
             method,
             url,
             status_code,
             response_chain,
             elapsed,
-            cookie,
         )
-        if elapsed > 5:
-            logger.warning(
-                "Slow Traccar request: %s %s -> %s (response chain: %s) took %.2fs cookie=%s",
-                method,
-                url,
-                status_code,
-                response_chain,
-                elapsed,
-                cookie,
-            )
