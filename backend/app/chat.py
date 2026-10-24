@@ -98,6 +98,34 @@ def _gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:8]}"
 
 
+SYNTAX_SNIPPET_RADIUS: Final[int] = 60
+
+
+def _compact_node_syntax_error(stderr: str) -> str:
+    """Reduce node's syntax-error output to the message and the code around the error.
+
+    Node prints the whole offending source line (minified scripts make it thousands of
+    characters) plus a stack trace. Both go to the log and back to the model, so keep
+    only the error message and a short window around the caret.
+    """
+    lines = stderr.strip().splitlines()
+    message = next((ln.strip() for ln in lines if re.match(r"\w*Error\b", ln.strip())), None)
+    caret = next((i for i, ln in enumerate(lines) if ln.strip() and set(ln.strip()) == {"^"}), None)
+    if message is None:
+        return stderr.strip()[:300]
+    if caret is None or caret == 0:
+        # Node omits the caret for very long lines; give the message and, from the
+        # "<file>:<line>" header, the line in the script (new Function adds 2 lines).
+        header = re.search(r":(\d+)$", lines[0].strip())
+        line = int(header.group(1)) - 2 if header else 0
+        return f"{message} (script line {line})" if line > 0 else message
+    source = lines[caret - 1]
+    column = lines[caret].index("^")
+    start = max(0, column - SYNTAX_SNIPPET_RADIUS)
+    snippet = source[start : column + SYNTAX_SNIPPET_RADIUS].strip()
+    return f"{message} near: ...{snippet}..."
+
+
 def _validate_js_syntax(html: str) -> str | None:
     """Extract and validate JavaScript syntax from HTML. Returns error message or None if valid."""
     script_pattern = re.compile(r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
@@ -118,7 +146,7 @@ def _validate_js_syntax(html: str) -> str | None:
             timeout=5,
         )
         if result.returncode != 0:
-            error = result.stderr.strip()
+            error = _compact_node_syntax_error(result.stderr)
             return f"JavaScript syntax error in script block {i + 1}: {error}"
     return None
 
