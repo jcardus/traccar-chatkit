@@ -54,6 +54,10 @@ SHOW_HTML_SCREENSHOT_PROMPT: Final[str] = (
 )
 # Pending screenshot tasks keyed by filename, so requests can await them
 screenshot_tasks: dict[str, asyncio.Task] = {}
+# Console and HTTP failures seen while shooting that PNG, keyed by filename.
+# A blank map is still a successful screenshot; this is what tells the model it failed.
+screenshot_page_errors: dict[str, str] = {}
+_MAX_PAGE_ERRORS = 8
 
 # Runs in the page before a screenshot: wait for webfonts, then for the DOM to
 # be quiet for `settleMs` (JS that renders charts/maps after load), capped at
@@ -184,6 +188,83 @@ def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
 
 
+def note_page_failure(notes: list[str], message: str) -> None:
+    """Keep a short, unique, token-free failure line from the rendered page."""
+    text = message.strip()
+    if not text or len(notes) >= _MAX_PAGE_ERRORS:
+        return
+    text = re.sub(r"access_token=[^&\s]+", "access_token=...", text)
+    text = re.sub(r"pk\.[A-Za-z0-9._-]+", "pk.…", text)
+    text = text[:400]
+    if text not in notes:
+        notes.append(text)
+
+
+def screenshot_review_text(errors: str) -> str:
+    """Prompt that accompanies the screenshot. Errors mean the page did not render."""
+    if not errors.strip():
+        return SHOW_HTML_SCREENSHOT_PROMPT
+    return (
+        "The page you just rendered failed. The screenshot shows the broken result, "
+        "not a finished page. Fix the HTML and call show_html again. Do not tell the "
+        "user this page is finished.\n"
+        f"Errors:\n{errors}"
+    )
+
+
+def take_screenshot_errors(screenshot_url: str) -> str:
+    filename = screenshot_url.rsplit("/", 1)[-1].split("?", 1)[0]
+    return screenshot_page_errors.pop(filename, "")
+
+
+def attach_page_failure_listeners(page, failures: list[str]) -> None:
+    """Record uncaught exceptions, console errors, and failed responses.
+
+    A rejected Mapbox token does not throw. The style request returns 401 and
+    the library writes to the console, which is the signal the screenshot used
+    to drop on the floor.
+    """
+
+    def on_pageerror(exc) -> None:
+        note_page_failure(failures, f"Page error: {exc}")
+
+    def on_console(msg) -> None:
+        if msg.type == "error":
+            note_page_failure(failures, f"Console: {msg.text}")
+
+    def on_response(response) -> None:
+        if response.status < 400:
+            return
+        path = response.url.split("?", 1)[0]
+        if path.endswith("favicon.ico"):
+            return
+        note_page_failure(failures, f"HTTP {response.status} {path}")
+
+    page.on("pageerror", on_pageerror)
+    page.on("console", on_console)
+    page.on("response", on_response)
+
+
+async def record_dom_page_errors(page, failures: list[str]) -> None:
+    """Copy `window.__PAGE_ERRORS__` recorded by the page itself."""
+    try:
+        state = await page.evaluate(
+            """() => ({
+                failed: window.__PAGE_FAILED__ === true,
+                errors: (window.__PAGE_ERRORS__ || []).map((item) => String(item)),
+            })"""
+        )
+    except Exception as exc:
+        logger.info("page-error read skipped: %s", exc)
+        return
+    if not isinstance(state, dict) or not state.get("failed"):
+        return
+    for item in state.get("errors") or []:
+        note_page_failure(failures, f"Page error: {item}")
+    if not any(item.startswith("Page error:") for item in failures):
+        note_page_failure(failures, "Page error: rendering failed")
+
+
 def _screenshot_url_from_output(output: Any) -> str | None:
     if isinstance(output, dict):
         url = output.get("screenshot_url")
@@ -253,7 +334,7 @@ class TraccarThreadItemConverter(ThreadItemConverter):
                 ),
                 ResponseInputTextParam(
                     type="input_text",
-                    text=SHOW_HTML_SCREENSHOT_PROMPT,
+                    text=screenshot_review_text(take_screenshot_errors(screenshot_url)),
                 ),
             ]
             return [EasyInputMessageParam(type="message", role="user", content=content)]
@@ -614,9 +695,11 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
                     try:
                         page = await browser.new_page(viewport={"width": 1280, "height": 720})
                         traffic = ApiTraffic()
+                        failures: list[str] = []
                         page.on("request", traffic.started)
                         page.on("requestfinished", traffic.finished)
                         page.on("requestfailed", traffic.finished)
+                        attach_page_failure_listeners(page, failures)
                         await page.goto(html_url, wait_until="load", timeout=90000)
 
                         # Best-effort network settle. Cap it short: some pages
@@ -631,7 +714,8 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
                         signalled = False
                         try:
                             await page.wait_for_function(
-                                "window.__SCREENSHOT_READY__ === true", timeout=10000
+                                "window.__SCREENSHOT_READY__ === true || window.__PAGE_FAILED__ === true",
+                                timeout=10000,
                             )
                             signalled = True
                         except PlaywrightTimeoutError:
@@ -659,6 +743,14 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
                         await page.screenshot(
                             path=str(screenshot_path), full_page=True, timeout=120000
                         )
+                        await record_dom_page_errors(page, failures)
+                        if failures:
+                            screenshot_page_errors[screenshot_filename] = "\n".join(
+                                f"- {item}" for item in failures
+                            )
+                            logger.info(
+                                "Page errors for %s: %s", screenshot_filename, failures
+                            )
                         elapsed = time.monotonic() - start
                         logger.info(
                             "Screenshot saved: %s (%.1fs%s)",

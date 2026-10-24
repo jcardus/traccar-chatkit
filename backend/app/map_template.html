@@ -173,8 +173,30 @@
       }
     });
 
+    // A rejected token or a failed style does not throw, so window.onerror never
+    // sees it. Record it for the screenshot step. Do not postMessage here: that
+    // user message lands while the screenshot tool call is still open and drops it.
+    // Tile errors after the style has loaded are not a failed page.
+    let mapFailed = false;
+    map.on('error', (event) => {
+      if (typeof map.isStyleLoaded === 'function' && map.isStyleLoaded()) return;
+      mapFailed = true;
+      window.__SCREENSHOT_READY__ = false;
+      const message = (event && event.error && event.error.message) || 'Map error';
+      window.__PAGE_ERRORS__ = window.__PAGE_ERRORS__ || [];
+      window.__PAGE_ERRORS__.push(message);
+      window.__PAGE_FAILED__ = true;
+    });
+    // A style that does load wins over an error from before it was ready.
+    map.on('load', () => {
+      mapFailed = false;
+      window.__PAGE_FAILED__ = false;
+      window.__PAGE_ERRORS__ = [];
+    });
+
     // Do not remove: tells the backend screenshot step rendering has settled.
-    map.on('idle', () => { window.__SCREENSHOT_READY__ = true; });
+    // A failed map also goes idle; that must not count as ready.
+    map.on('idle', () => { if (!mapFailed) window.__SCREENSHOT_READY__ = true; });
   </script>
 </body>
 </html>
