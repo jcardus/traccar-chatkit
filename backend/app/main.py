@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 import time
@@ -9,6 +10,7 @@ import time
 import httpx
 from chatkit.server import StreamingResult
 from chatkit.store import NotFoundError
+from chatkit.types import ClientToolCallItem
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -246,13 +248,46 @@ async def _timed_sse_stream(result: StreamingResult, label: str):
             logger.warning("Slow %s stream: %.2fs (%d chunks)", label, elapsed, chunk_count)
 
 
+async def _is_stale_tool_output(
+    server: TraccarAssistantServer, payload: bytes, context: dict
+) -> bool:
+    """True if payload is a threads.add_client_tool_output with no pending tool call to answer.
+
+    ChatKit only accepts a tool output while the thread's latest item is the pending
+    ClientToolCallItem. If something was added after it (a newer user message, e.g. an
+    html-error report sent while the screenshot was still being awaited), ChatKit raises
+    ValueError and the stream dies with a traceback. The newer turn supersedes that tool
+    call, so the output is dropped instead.
+    """
+    try:
+        request = json.loads(payload)
+        if request.get("type") != "threads.add_client_tool_output":
+            return False
+        thread_id = request["params"]["thread_id"]
+        items = await server.store.load_thread_items(thread_id, None, 1, "desc", context)
+    except Exception:
+        return False
+    return not any(
+        isinstance(item, ClientToolCallItem) and item.status == "pending" for item in items.data
+    )
+
+
+async def _empty_stream():
+    return
+    yield
+
+
 @app.post("/chatkit")
 async def chatkit_endpoint(
     request: Request, server: TraccarAssistantServer = Depends(get_chatkit_server)
 ) -> Response:
     payload = await request.body()
+    context = {"request": request}
+    if await _is_stale_tool_output(server, payload, context):
+        logger.warning("Dropping stale threads.add_client_tool_output: no pending tool call")
+        return StreamingResponse(_empty_stream(), media_type="text/event-stream")
     process_start = time.monotonic()
-    result = await server.process(payload, {"request": request})
+    result = await server.process(payload, context)
     logger.info("server.process took %.2fs", time.monotonic() - process_start)
     if isinstance(result, StreamingResult):
         return StreamingResponse(
