@@ -6,11 +6,65 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet" />
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
   <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    html, body { height: 100%; margin: 0; }
+    /* The canvas fills #map and would sit on top of anything inside it. */
+    #map { position: absolute; inset: 0; z-index: 0; }
+    /* Full-page layer above the canvas. Empty space lets pans and the zoom
+       control through; only the controls themselves take clicks. */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px;
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    #controls-top, #controls-bottom {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    /* Leave the Mapbox zoom control (top right) clear. */
+    #controls-top { margin-right: 52px; }
+    #overlay :is(button, a, input, select, textarea, label, .panel) {
+      pointer-events: auto;
+    }
+    #overlay :is(button, select, input, .panel) {
+      font: 14px/1.2 system-ui, sans-serif;
+      background: #fff;
+      color: #111;
+      border: 0;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
+    }
+    #overlay :is(button, select) { padding: 8px 12px; cursor: pointer; }
+    #overlay input { padding: 8px; }
+    #overlay .panel { padding: 10px 12px; }
+    /* A control added outside the slots still has to beat the canvas. */
+    body > :is(button, div, form, nav, section):not(#map):not(#overlay) {
+      position: relative;
+      z-index: 2;
+    }
+    #map :is(button, a, input, select, label) {
+      position: relative;
+      z-index: 5;
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <!-- Put buttons, selects, and panels in these slots, or call addControl().
+       Do not place them inside #map: the canvas covers that div and takes the click. -->
+  <div id="overlay">
+    <div id="controls-top"></div>
+    <div id="controls-bottom"></div>
+  </div>
   <script>
     // Do not remove: this is how a broken page reports back to the assistant.
     window.onerror = function (message, source, lineno, colno) {
@@ -41,6 +95,13 @@
     });
     map.addControl(new mapboxgl.NavigationControl());
 
+    // Keep controls above the canvas. where is 'top' (default) or 'bottom'.
+    function addControl(element, where) {
+      const slot = document.getElementById(where === 'bottom' ? 'controls-bottom' : 'controls-top');
+      slot.appendChild(element);
+      return element;
+    }
+
     map.on('load', () => {
       try {
         // -----------------------------------------------------------------
@@ -56,6 +117,9 @@
         // a route, geofences, ...). geometry.coordinates is
         // [longitude, latitude] -- note the order. Put whatever you want to
         // show in a popup or label into feature.properties.
+        //
+        // Buttons go through addControl(button) or addControl(button, 'bottom').
+        // Do not append them to #map or document.body; the canvas takes those clicks.
 
         const exampleData = {
           type: 'FeatureCollection',

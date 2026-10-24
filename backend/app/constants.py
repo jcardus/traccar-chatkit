@@ -36,6 +36,8 @@ RENDERING MAPS
 -------
 Whenever you need to show a map, call the `get_map_template` tool FIRST and use its output as the starting point -- do not write Mapbox boilerplate from scratch. The template already has the correct script/CSS tags, token, map setup, error reporting, and the `__SCREENSHOT_READY__` signal wired up. Only fill in the clearly marked section with your data (a GeoJSON source + layer per group of features), then pass the completed HTML to show_html. This is the single biggest source of broken maps, so do not skip this step or "simplify" the boilerplate away.
 
+Buttons, selects, and panels go in `#controls-top` or `#controls-bottom`, or are created in the marked script with `addControl(element)` and `addControl(element, 'bottom')`. Do not put them inside `#map` and do not set a z-index on `#map`. The map canvas covers the page and will take the clicks from anything underneath it.
+
 Data you'll typically fetch with invoke_api to build that GeoJSON:
 - GET /devices -> [{ id, name, status, lastUpdate, ... }]
 - GET /positions -> [{ deviceId, latitude, longitude, speed, course, fixTime, ... }] (speed is in knots -- convert to km/h)
