@@ -687,7 +687,8 @@ async def get_openapi_yaml() -> str:
     description_override=(
         "A working Mapbox GL HTML page to use as the starting point when rendering a map. "
         "Fetch this before writing any map HTML, fill in the marked section with your data, "
-        "then pass the result to show_html."
+        "then pass the result to show_html. Put buttons in the overlay slots or add them "
+        "with addControl(); the map canvas takes clicks from controls placed inside #map."
     )
 )
 async def get_map_template() -> str:
