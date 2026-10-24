@@ -422,7 +422,7 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
     return TraccarAssistantServer()
 
 
-MAX_RESPONSE_SIZE: Final[int] = 548576
+MAX_RESPONSE_SIZE: Final[int] = 1_000_000
 # Cap on the sample records included when a result is too large to return in full.
 SAMPLE_MAX_BYTES: Final[int] = 4000
 SAMPLE_MAX_ITEMS: Final[int] = 3
