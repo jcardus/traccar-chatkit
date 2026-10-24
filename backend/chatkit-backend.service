@@ -16,8 +16,8 @@ EnvironmentFile=/root/traccar-chatkit/backend/.env
 # node must be on PATH: show_html uses it to syntax-check generated JavaScript.
 # If node comes from nvm, add its bin directory here.
 Environment=PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin
-# Match the host/port you run today (check with: ss -ltnp).
-ExecStart=/root/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Port 80: the origin port Cloudflare connects to (it does not proxy to 8000).
+ExecStart=/root/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port 80
 Restart=always
 RestartSec=3
 
