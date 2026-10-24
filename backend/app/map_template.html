@@ -7,110 +7,297 @@
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
   <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .card {
+      position: absolute; z-index: 2; background: rgba(255, 255, 255, 0.94);
+      border-radius: 10px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.25);
+      color: #0f172a; font-size: 13px; line-height: 1.4;
+    }
+    #header { top: 12px; left: 12px; padding: 10px 14px; max-width: min(320px, calc(100% - 90px)); }
+    #header h1 { margin: 0; font-size: 15px; font-weight: 650; }
+    #header p { margin: 2px 0 0; color: #475569; }
+    #legend { bottom: 28px; left: 12px; padding: 8px 12px; }
+    #legend div { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+    #legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.25); }
+    #message {
+      position: absolute; z-index: 3; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      padding: 14px 20px; max-width: min(420px, calc(100% - 48px)); text-align: center; display: none;
+    }
+    #message.error { color: #991b1b; }
+    .mapboxgl-popup-content { padding: 12px 14px; border-radius: 10px; font-size: 13px; color: #0f172a; }
+    .mapboxgl-popup-content h3 { margin: 0 24px 6px 0; font-size: 14px; }
+    .mapboxgl-popup-content table { border-collapse: collapse; }
+    .mapboxgl-popup-content td { padding: 1px 10px 1px 0; vertical-align: top; }
+    .mapboxgl-popup-content td:first-child { color: #64748b; white-space: nowrap; }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div id="header" class="card" hidden></div>
+  <div id="legend" class="card" hidden></div>
+  <div id="message" class="card"></div>
+
   <script>
-    // Do not remove: this is how a broken page reports back to the assistant.
+    // ---------------------------------------------------------------------------
+    // Error reporting. Do not remove: this is how a broken page tells the assistant.
+    // Each distinct message is sent once, and at most 3 in total.
+    // ---------------------------------------------------------------------------
+    const reported = new Set();
+    function report(message, visible) {
+      window.__SCREENSHOT_READY__ = true; // do not make the screenshot wait for a broken page
+      if (reported.has(message) || reported.size >= 3) return;
+      reported.add(message);
+      try { window.parent.postMessage({ type: 'html-error', message: String(message) }, '*'); } catch (e) { /* no-op */ }
+      if (visible) showMessage(String(message), true);
+    }
     window.onerror = function (message, source, lineno, colno) {
-      try {
-        window.parent.postMessage(
-          { type: 'html-error', message: String(message) + ' at line ' + lineno + ':' + colno },
-          '*'
-        );
-      } catch (e) { /* no-op */ }
+      report(String(message) + ' at line ' + lineno + ':' + colno);
     };
     window.addEventListener('unhandledrejection', function (event) {
-      try {
-        window.parent.postMessage(
-          { type: 'html-error', message: 'Unhandled promise rejection: ' + event.reason },
-          '*'
-        );
-      } catch (e) { /* no-op */ }
+      report('Unhandled promise rejection: ' + event.reason);
     });
+    function showMessage(text, isError) {
+      const el = document.getElementById('message');
+      el.textContent = text;
+      el.className = 'card' + (isError ? ' error' : '');
+      el.style.display = 'block';
+    }
 
-    mapboxgl.accessToken =
-      'pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg';
+    // ---------------------------------------------------------------------------
+    // YOUR DATA. Edit this section; keep the rest unless you need something extra.
+    //
+    // getData() returns the map contents (it may be async, e.g. to fetch('/api/...')).
+    // Check response.ok on every fetch and throw an Error if it is not ok.
+    //
+    //   title, subtitle  optional header text
+    //   points  [{ lng, lat, name, status, heading, color, details }]
+    //             status:  'online' | 'offline' | 'unknown' (sets the color and legend)
+    //             heading: optional degrees (0 = north), draws a direction arrow
+    //             color:   optional CSS color, overrides the status color
+    //             details: optional { Label: 'value' } shown in the popup
+    //   lines   [{ coords: [[lng, lat], ...], name, color, details }]  (routes)
+    //   areas   [{ coords: [[lng, lat], ...], name, color, details }]  (geofences, one ring each)
+    //
+    // Coordinates are [longitude, latitude]. Traccar speeds are in knots: x 1.852 = km/h.
+    // Use names, never internal ids, in `name` and `details`.
+    // ---------------------------------------------------------------------------
+    async function getData() {
+      return {
+        title: 'Example',
+        subtitle: '1 vehicle',
+        points: [
+          { lng: -9.1393, lat: 38.7223, name: 'Example vehicle', status: 'online', heading: 45,
+            details: { Speed: '42 km/h', 'Last update': '2026-01-01 12:00' } },
+        ],
+        lines: [],
+        areas: [],
+      };
+    }
+    // ---------------------------------------------------------------------------
 
-    // Do not set `style` -- the default is already configured for this app.
-    const map = new mapboxgl.Map({
-      container: 'map',
-      center: [0, 0],
-      zoom: 2,
-    });
-    map.addControl(new mapboxgl.NavigationControl());
+    async function main() {
+      mapboxgl.accessToken =
+        'pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg';
 
-    map.on('load', () => {
+      const STATUS = {
+        online: { color: '#16a34a', label: 'Online' },
+        offline: { color: '#64748b', label: 'Offline' },
+        unknown: { color: '#f59e0b', label: 'Unknown' },
+      };
+      const statusColor = (s) => (STATUS[s] || STATUS.unknown).color;
+      const ACCENT = '#2563eb';
+
+      // Fetch first so the map is created already framed on the data. Starting from the
+      // world view loads far more tiles, delays the first render and the screenshot.
+      let data;
       try {
-        // -----------------------------------------------------------------
-        // Replace everything below with your real data. Keep everything
-        // above (the script tags, error handlers, token, map setup) as-is.
-        //
-        // Typical Traccar shapes you'll fetch via invoke_api:
-        //   GET /devices   -> [{ id, name, status, lastUpdate, ... }]
-        //   GET /positions -> [{ deviceId, latitude, longitude, speed,
-        //                        course, fixTime, ... }]
-        //
-        // Build one GeoJSON FeatureCollection per logical group (devices,
-        // a route, geofences, ...). geometry.coordinates is
-        // [longitude, latitude] -- note the order. Put whatever you want to
-        // show in a popup or label into feature.properties.
-
-        const exampleData = {
-          type: 'FeatureCollection',
-          features: [
-            {
-              type: 'Feature',
-              geometry: { type: 'Point', coordinates: [0, 0] },
-              properties: { name: 'Example device' },
-            },
-          ],
-        };
-
-        map.addSource('example', { type: 'geojson', data: exampleData });
-
-        map.addLayer({
-          id: 'example-points',
-          type: 'circle',
-          source: 'example',
-          paint: {
-            'circle-radius': 6,
-            'circle-color': '#ff0000',
-            'circle-stroke-color': '#fff',
-            'circle-stroke-width': 1.5,
-          },
-        });
-
-        // Optional: a popup on click, keyed to the layer above.
-        map.on('click', 'example-points', (e) => {
-          const feature = e.features[0];
-          new mapboxgl.Popup()
-            .setLngLat(feature.geometry.coordinates)
-            .setHTML(feature.properties.name || '')
-            .addTo(map);
-        });
-
-        // Fit the map to your data once it's added. Collect every
-        // [lng, lat] pair you rendered above into `coords`.
-        const coords = exampleData.features
-          .filter((f) => f.geometry.type === 'Point')
-          .map((f) => f.geometry.coordinates);
-        if (coords.length) {
-          const bounds = coords.reduce(
-            (b, c) => b.extend(c),
-            new mapboxgl.LngLatBounds(coords[0], coords[0])
-          );
-          map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
-        }
-        // -----------------------------------------------------------------
+        data = await getData();
       } catch (e) {
-        window.parent.postMessage({ type: 'html-error', message: 'Map setup failed: ' + e.message }, '*');
+        report('Map setup failed: ' + (e && e.message ? e.message : e), true);
+        return;
       }
-    });
+      const start = dataBounds(data);
+      renderChrome(data);
 
-    // Do not remove: tells the backend screenshot step rendering has settled.
-    map.on('idle', () => { window.__SCREENSHOT_READY__ = true; });
+      // Do not set `style`: the default style is already configured for this app.
+      const map = new mapboxgl.Map({
+        container: 'map',
+        center: [0, 20],
+        zoom: 2,
+        ...(start ? { bounds: start, fitBoundsOptions: { padding: { top: 90, bottom: 110, left: 110, right: 70 }, maxZoom: 15 } } : {}),
+      });
+      map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+      map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+      map.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+
+      // Map errors (bad token, style or tile failures) never reach window.onerror.
+      map.on('error', (e) => report('Map error: ' + ((e && e.error && e.error.message) || 'unknown')));
+
+      function arrowImage() {
+        const size = 48, c = document.createElement('canvas');
+        c.width = c.height = size;
+        const g = c.getContext('2d');
+        g.translate(size / 2, size / 2);
+        g.beginPath(); g.moveTo(0, -20); g.lineTo(11, 8); g.lineTo(0, 3); g.lineTo(-11, 8); g.closePath();
+        g.fillStyle = '#ffffff'; g.fill();
+        g.lineWidth = 3; g.strokeStyle = 'rgba(15, 23, 42, 0.55)'; g.stroke();
+        return g.getImageData(0, 0, size, size);
+      }
+
+      function dataBounds(d) {
+        const b = new mapboxgl.LngLatBounds();
+        (d.points || []).filter((p) => valid(p.lng, p.lat)).forEach((p) => b.extend([p.lng, p.lat]));
+        (d.lines || []).forEach((l) => (l.coords || []).forEach((c) => b.extend(c)));
+        (d.areas || []).forEach((a) => (a.coords || []).forEach((c) => b.extend(c)));
+        return b.isEmpty() ? null : b;
+      }
+
+      function fc(features) { return { type: 'FeatureCollection', features }; }
+      function valid(lng, lat) { return Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180; }
+
+      function popupContent(props) {
+        const root = document.createElement('div');
+        const h = document.createElement('h3');
+        h.textContent = props.name || 'Details';
+        root.appendChild(h);
+        const details = props.details ? JSON.parse(props.details) : {};
+        const entries = Object.entries(details);
+        if (entries.length) {
+          const table = document.createElement('table');
+          for (const [k, v] of entries) {
+            const tr = table.insertRow();
+            tr.insertCell().textContent = k;
+            tr.insertCell().textContent = v == null ? '' : String(v);
+          }
+          root.appendChild(table);
+        }
+        return root; // DOM nodes, not HTML strings: names and details may contain markup
+      }
+
+      // Header, legend and empty-state use no map tiles, so show them straight away.
+      function renderChrome(data) {
+        const points = (data.points || []).filter((p) => valid(p.lng, p.lat));
+        const count = points.length
+          + (data.lines || []).filter((l) => (l.coords || []).length > 1).length
+          + (data.areas || []).filter((a) => (a.coords || []).length > 2).length;
+        if (data.title || data.subtitle) {
+          const h = document.getElementById('header');
+          h.replaceChildren();
+          if (data.title) { const t = document.createElement('h1'); t.textContent = data.title; h.appendChild(t); }
+          if (data.subtitle) { const s = document.createElement('p'); s.textContent = data.subtitle; h.appendChild(s); }
+          h.hidden = false;
+        }
+
+        const tally = {};
+        points.forEach((p) => { if (!p.color) tally[p.status in STATUS ? p.status : 'unknown'] = (tally[p.status in STATUS ? p.status : 'unknown'] || 0) + 1; });
+        const keys = Object.keys(tally);
+        if (keys.length > 1 || (keys.length === 1 && points.length > 1)) {
+          const lg = document.getElementById('legend');
+          lg.replaceChildren();
+          keys.forEach((k) => {
+            const row = document.createElement('div');
+            const dot = document.createElement('i'); dot.style.background = STATUS[k].color;
+            const txt = document.createElement('span'); txt.textContent = STATUS[k].label + ' (' + tally[k] + ')';
+            row.append(dot, txt); lg.appendChild(row);
+          });
+          lg.hidden = false;
+        }
+
+        if (!count) showMessage('There is no data to show on the map for this selection.');
+      }
+
+      function render(data) {
+        const points = (data.points || []).filter((p) => valid(p.lng, p.lat));
+        const lines = (data.lines || []).filter((l) => (l.coords || []).length > 1);
+        const areas = (data.areas || []).filter((a) => (a.coords || []).length > 2);
+          let count = 0;
+
+        if (areas.length) {
+          map.addSource('areas', { type: 'geojson', data: fc(areas.map((a) => {
+            const ring = a.coords.slice();
+            const [fx, fy] = ring[0], [lx, ly] = ring[ring.length - 1];
+            if (fx !== lx || fy !== ly) ring.push(ring[0]);
+              return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] },
+                     properties: { name: a.name || '', color: a.color || ACCENT, details: JSON.stringify(a.details || {}) } };
+          })) });
+          map.addLayer({ id: 'areas-fill', type: 'fill', source: 'areas',
+                         paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.18 } });
+          map.addLayer({ id: 'areas-line', type: 'line', source: 'areas',
+                         paint: { 'line-color': ['get', 'color'], 'line-width': 2 } });
+          count += areas.length;
+        }
+
+        if (lines.length) {
+          const ends = [];
+          map.addSource('lines', { type: 'geojson', data: fc(lines.map((l) => {
+              ends.push({ type: 'Feature', geometry: { type: 'Point', coordinates: l.coords[0] }, properties: { color: '#16a34a' } });
+            ends.push({ type: 'Feature', geometry: { type: 'Point', coordinates: l.coords[l.coords.length - 1] }, properties: { color: '#dc2626' } });
+            return { type: 'Feature', geometry: { type: 'LineString', coordinates: l.coords },
+                     properties: { name: l.name || '', color: l.color || ACCENT, details: JSON.stringify(l.details || {}) } };
+          })) });
+          map.addSource('line-ends', { type: 'geojson', data: fc(ends) });
+          map.addLayer({ id: 'lines-casing', type: 'line', source: 'lines',
+                         layout: { 'line-cap': 'round', 'line-join': 'round' },
+                         paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.9 } });
+          map.addLayer({ id: 'lines', type: 'line', source: 'lines',
+                         layout: { 'line-cap': 'round', 'line-join': 'round' },
+                         paint: { 'line-color': ['get', 'color'], 'line-width': 4 } });
+          map.addLayer({ id: 'line-ends', type: 'circle', source: 'line-ends',
+                         paint: { 'circle-radius': 6, 'circle-color': ['get', 'color'],
+                                  'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+          count += lines.length;
+        }
+
+        if (points.length) {
+          map.addImage('arrow', arrowImage());
+          map.addSource('points', { type: 'geojson', data: fc(points.map((p) => {
+              return { type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+                     properties: { name: p.name || '', color: p.color || statusColor(p.status),
+                                   heading: Number.isFinite(p.heading) ? p.heading : -1,
+                                   details: JSON.stringify(p.details || {}) } };
+          })) });
+          map.addLayer({ id: 'points', type: 'circle', source: 'points',
+                         paint: { 'circle-radius': 8, 'circle-color': ['get', 'color'],
+                                  'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2.5 } });
+          map.addLayer({ id: 'points-heading', type: 'symbol', source: 'points', filter: ['>=', ['get', 'heading'], 0],
+                         layout: { 'icon-image': 'arrow', 'icon-size': 0.32, 'icon-rotate': ['get', 'heading'],
+                                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
+          map.addLayer({ id: 'points-label', type: 'symbol', source: 'points', minzoom: 11,
+                         layout: { 'text-field': ['get', 'name'], 'text-size': 12, 'text-offset': [0, 1.6], 'text-anchor': 'top', 'text-optional': true },
+                         paint: { 'text-color': '#0f172a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 } });
+          count += points.length;
+        }
+
+        const interactive = ['points', 'lines', 'areas-fill'].filter((id) => map.getLayer(id));
+        map.on('click', (e) => {
+          const f = map.queryRenderedFeatures(e.point, { layers: interactive })[0];
+          if (!f) return;
+          const at = f.geometry.type === 'Point' ? f.geometry.coordinates : e.lngLat;
+          new mapboxgl.Popup({ maxWidth: '300px' }).setLngLat(at).setDOMContent(popupContent(f.properties)).addTo(map);
+        });
+        interactive.forEach((id) => {
+          map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+          map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+        });
+
+        }
+
+      map.on('load', () => {
+        try {
+          render(data);
+        } catch (e) {
+          report('Map setup failed: ' + (e && e.message ? e.message : e), true);
+        }
+        // Do not remove: tells the backend screenshot step rendering has settled.
+        map.once('idle', () => { window.__SCREENSHOT_READY__ = true; });
+      });
+    }
+
+    if (typeof mapboxgl === 'undefined') {
+      report('Mapbox GL failed to load (script blocked or offline)', true);
+    } else {
+      main().catch((e) => report('Map setup failed: ' + (e && e.message ? e.message : e), true));
+    }
   </script>
 </body>
 </html>

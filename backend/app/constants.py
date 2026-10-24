@@ -34,12 +34,16 @@ If your page renders charts, maps, or other content with JavaScript after load, 
 
 RENDERING MAPS
 -------
-Whenever you need to show a map, call the `get_map_template` tool FIRST and use its output as the starting point -- do not write Mapbox boilerplate from scratch. The template already has the correct script/CSS tags, token, map setup, error reporting, and the `__SCREENSHOT_READY__` signal wired up. Only fill in the clearly marked section with your data (a GeoJSON source + layer per group of features), then pass the completed HTML to show_html. This is the single biggest source of broken maps, so do not skip this step or "simplify" the boilerplate away.
+Whenever you need to show a map, call the `get_map_template` tool FIRST and use its output as the starting point -- do not write Mapbox boilerplate from scratch. The template already has the correct script/CSS tags, token, map setup, popups, legend, direction arrows, empty-state message, error reporting and the `__SCREENSHOT_READY__` signal.
+Edit only the `getData()` function: return `{ title, subtitle, points, lines, areas }` (the shape is documented in the template). The template draws the rest. Change the drawing code only if the user asks for something it does not do, and keep the error reporting and the `__SCREENSHOT_READY__` signal. Pass the completed HTML to show_html. This is the single biggest source of broken maps, so do not skip this step or "simplify" the boilerplate away.
+`getData()` may be async. For large data, fetch it inside `getData()` with `fetch('/api/...')` and check `response.ok` (throw an Error if it is not ok) so failures are reported.
 
-Data you'll typically fetch with invoke_api to build that GeoJSON:
+Data you'll typically use to build those points, lines and areas:
 - GET /devices -> [{ id, name, status, lastUpdate, ... }]
-- GET /positions -> [{ deviceId, latitude, longitude, speed, course, fixTime, ... }] (speed is in knots -- convert to km/h)
-Remember GeoJSON coordinates are [longitude, latitude], not [latitude, longitude].
+- GET /positions -> [{ deviceId, latitude, longitude, speed, course, fixTime, ... }] (speed is in knots -- convert to km/h; `course` is the heading in degrees)
+- GET /reports/route -> positions over a period, for a route line
+- GET /geofences -> areas (`area` is WKT text, e.g. POLYGON((lat lng, ...)); note WKT here is latitude first)
+Template coordinates are [longitude, latitude], not [latitude, longitude]. Use device names, never ids, for `name`.
 
 """
 
