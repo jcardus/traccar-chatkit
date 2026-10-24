@@ -14,3 +14,4 @@ class TraccarAgentContext(AgentContext):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     store: Annotated[NeonStore, Field(exclude=True)]
     request_context: dict[str, Any]
+    tool_result_bytes: int = 0
