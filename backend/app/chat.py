@@ -423,6 +423,39 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
 
 
 MAX_RESPONSE_SIZE: Final[int] = 548576
+# Cap on the sample records included when a result is too large to return in full.
+SAMPLE_MAX_BYTES: Final[int] = 4000
+SAMPLE_MAX_ITEMS: Final[int] = 3
+
+
+def _summarize_large_result(result: Any, size: int) -> dict[str, Any]:
+    """Describe an oversized API result without returning the data itself.
+
+    The model gets the shape (count, field names, a few sample records) so it can
+    write correct client-side fetch code in show_html instead of retrying.
+    """
+    summary: dict[str, Any] = {
+        "truncated": True,
+        "reason": f"Response too large ({size} bytes) to return in full.",
+    }
+    if isinstance(result, list):
+        summary["total_items"] = len(result)
+        dicts = [item for item in result[:50] if isinstance(item, dict)]
+        summary["fields"] = sorted({key for item in dicts for key in item})
+        sample = result[:SAMPLE_MAX_ITEMS]
+        while sample and len(json.dumps(sample)) > SAMPLE_MAX_BYTES:
+            sample = sample[:-1]
+        summary["sample"] = sample
+    elif isinstance(result, dict):
+        summary["fields"] = {
+            key: f"list of {len(value)}" if isinstance(value, list) else type(value).__name__
+            for key, value in result.items()
+        }
+    summary["next_step"] = (
+        "Do not retry this call. Fetch the full data client-side in your HTML with "
+        "JavaScript fetch() on the same path under /api/, and render it with show_html."
+    )
+    return summary
 
 
 @function_tool(description_override="invoke traccar api")
@@ -444,10 +477,7 @@ async def invoke_api(
     logger.info("invoke_api response size: %d bytes", response_size)
     if response_size > MAX_RESPONSE_SIZE:
         logger.warning("Response too large: %d bytes, limit: %d", response_size, MAX_RESPONSE_SIZE)
-        return {
-            "error": f"Response too large ({response_size} bytes). "
-            "Fetch this data client-side in your HTML using JavaScript fetch() instead."
-        }
+        return _summarize_large_result(result, response_size)
     return result
 
 
