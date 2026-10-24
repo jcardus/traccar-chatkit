@@ -52,9 +52,6 @@ def _real_ip(request: Request) -> str:
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     ip = _real_ip(request)
-    logger.info(
-        "%s %s %s %s", ip, request.method, request.url.path, request.headers.get("cf-ipcountry")
-    )
     start = time.monotonic()
     try:
         response = await call_next(request)
@@ -68,7 +65,13 @@ async def log_requests(request: Request, call_next):
     # per-stream timing logged in chatkit_endpoint for the true duration.
     elapsed = time.monotonic() - start
     logger.info(
-        "%s %s -> %s in %.2fs", request.method, request.url.path, response.status_code, elapsed
+        "%s %s %s -> %s in %.2fs (%s)",
+        ip,
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed,
+        request.headers.get("cf-ipcountry"),
     )
     if elapsed > 10:
         logger.warning(
@@ -118,23 +121,20 @@ async def proxy_traccar(request: Request, path: str) -> Response:
             content=body or None,
         )
     elapsed = time.monotonic() - start
-    logger.info(
-        "%s %s -> %s took %.2fs cookie=%s",
+    if elapsed > 5:
+        level = logging.WARNING
+    elif resp.status_code >= 400:
+        level = logging.INFO
+    else:
+        level = logging.DEBUG
+    logger.log(
+        level,
+        "%s %s -> %s took %.2fs",
         request.method,
         traccar_url,
         resp.status_code,
         elapsed,
-        cookie,
     )
-    if elapsed > 5:
-        logger.warning(
-            "Slow proxy_traccar: %s %s -> %s took %.2fs cookie=%s",
-            request.method,
-            traccar_url,
-            resp.status_code,
-            elapsed,
-            cookie,
-        )
 
     excluded = {"transfer-encoding", "content-encoding", "content-length"}
     resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
@@ -233,7 +233,7 @@ async def _timed_sse_stream(result: StreamingResult, label: str):
     chunk_count = 0
     byte_count = 0
     outcome = "cancelled"
-    logger.info("%s stream starting", label)
+    logger.debug("%s stream starting", label)
     try:
         async for chunk in result:
             chunk_count += 1
@@ -301,9 +301,7 @@ async def chatkit_endpoint(
     if await _is_stale_tool_output(server, payload, context):
         logger.warning("Dropping stale threads.add_client_tool_output: no pending tool call")
         return StreamingResponse(_empty_stream(), media_type="text/event-stream")
-    process_start = time.monotonic()
     result = await server.process(payload, context)
-    logger.info("server.process took %.2fs", time.monotonic() - process_start)
     if isinstance(result, StreamingResult):
         return StreamingResponse(
             _timed_sse_stream(result, "chatkit"), media_type="text/event-stream"

@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 import logging
+import os
 import re
 import subprocess
 import time
@@ -33,7 +34,12 @@ from .neon_store import NeonStore
 from .support import _user_message_text, ask_support_specialist, forward_to_real_agent
 from .traccar import _get_session_id, _get_traccar_url, invoke
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+# Every OpenAI request and trace upload is logged at INFO by httpx; that was most of the log.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 SUPPORTED_COLOR_SCHEMES: Final[frozenset[str]] = frozenset({"light", "dark"})
@@ -93,7 +99,6 @@ def _gen_id(prefix: str) -> str:
 
 
 def _validate_js_syntax(html: str) -> str | None:
-    logger.info("_validate_js_syntax")
     """Extract and validate JavaScript syntax from HTML. Returns error message or None if valid."""
     script_pattern = re.compile(r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
     scripts = script_pattern.findall(html)
@@ -115,7 +120,6 @@ def _validate_js_syntax(html: str) -> str | None:
         if result.returncode != 0:
             error = result.stderr.strip()
             return f"JavaScript syntax error in script block {i + 1}: {error}"
-    logger.info("syntax ok")
     return None
 
 
@@ -257,7 +261,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
                 yield event
         finally:
             elapsed = time.monotonic() - turn_start
-            logger.info("respond turn: thread=%s took %.2fs", thread.id, elapsed)
+            logger.debug("respond turn: thread=%s took %.2fs", thread.id, elapsed)
             if elapsed > 20:
                 logger.warning("Slow respond turn: thread=%s took %.2fs", thread.id, elapsed)
 
@@ -277,7 +281,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         if target_item is None:
             target_item = await self._latest_thread_item(thread, context)
 
-        logger.info(
+        logger.debug(
             "respond: item=%s target_item=%s type=%s",
             type(item).__name__ if item else None,
             type(target_item).__name__ if target_item else None,
@@ -313,7 +317,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         )
         run_start = time.monotonic()
         event_count = 0
-        logger.info("agent run starting: thread=%s", thread.id)
+        logger.debug("agent run starting: thread=%s", thread.id)
         try:
             async for event in stream_agent_response(agent_context, result):
                 event_count += 1
@@ -323,7 +327,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             # client disconnects / the request is cancelled mid-stream -- that
             # cancellation *is* what a Vercel proxy timeout looks like from here,
             # and a bare statement after the loop would silently never run.
-            logger.info(
+            logger.debug(
                 "agent run: thread=%s events=%d took %.2fs",
                 thread.id,
                 event_count,
@@ -487,16 +491,18 @@ async def invoke_api(
     path: str,
     body: str = "",
 ):
-    start = time.monotonic()
     result = invoke(
         method,
         path,
         body,
         ctx.context.request_context.get("request"),
     )
-    logger.info("invoke_api tool: %s %s took %.2fs", method, path, time.monotonic() - start)
     response_size = len(json.dumps(result))
-    logger.info("invoke_api response size: %d bytes", response_size)
+    logger.log(
+        logging.INFO if response_size >= 100_000 else logging.DEBUG,
+        "invoke_api response size: %d bytes",
+        response_size,
+    )
     over_turn_budget = ctx.context.tool_result_bytes + response_size > MAX_TURN_RESULT_BYTES
     if response_size > MAX_RESPONSE_SIZE or over_turn_budget:
         logger.warning(
@@ -534,7 +540,7 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
     try:
-        logger.info("TOOL: show_html")
+        logger.debug("TOOL: show_html")
         js_error = _validate_js_syntax(html)
         if js_error:
             logger.warning("JS validation failed: %s", js_error)
@@ -622,7 +628,7 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
                 "screenshot_url": screenshot_url,
             },
         )
-        logger.info("show_html success")
+        logger.debug("show_html success")
         return {"result": "success", "url": html_url}
     except Exception:
         logger.exception("show_html failed")
@@ -631,7 +637,7 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
 
 @function_tool(description_override="Open API specification (yaml) for the Traccar server")
 async def get_openapi_yaml() -> str:
-    logger.info("TOOL: get_openapi_yaml")
+    logger.debug("TOOL: get_openapi_yaml")
     return (Path(__file__).parent / "openapi.yaml").read_text()
 
 
@@ -643,5 +649,5 @@ async def get_openapi_yaml() -> str:
     )
 )
 async def get_map_template() -> str:
-    logger.info("TOOL: get_map_template")
+    logger.debug("TOOL: get_map_template")
     return (Path(__file__).parent / "map_template.html").read_text()
