@@ -422,10 +422,7 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
     return TraccarAssistantServer()
 
 
-# ~10% of the 1.05M-token window per tool result; 2.5 bytes/token measured on Traccar position JSON.
-MAX_RESPONSE_TOKENS: Final[int] = 100_000
-ESTIMATED_BYTES_PER_TOKEN: Final[float] = 2.5
-MAX_RESPONSE_SIZE: Final[int] = int(MAX_RESPONSE_TOKENS * ESTIMATED_BYTES_PER_TOKEN)
+MAX_RESPONSE_SIZE: Final[int] = 548576
 # Cap on the sample records included when a result is too large to return in full.
 SAMPLE_MAX_BYTES: Final[int] = 4000
 SAMPLE_MAX_ITEMS: Final[int] = 3
