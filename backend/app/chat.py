@@ -422,9 +422,6 @@ def create_chatkit_server() -> TraccarAssistantServer | None:
     return TraccarAssistantServer()
 
 
-MAX_RESPONSE_SIZE: Final[int] = 548576
-
-
 @function_tool(description_override="invoke traccar api")
 async def invoke_api(
     ctx: RunContextWrapper[TraccarAgentContext],
@@ -440,14 +437,7 @@ async def invoke_api(
         ctx.context.request_context.get("request"),
     )
     logger.info("invoke_api tool: %s %s took %.2fs", method, path, time.monotonic() - start)
-    response_size = len(json.dumps(result))
-    logger.info("invoke_api response size: %d bytes", response_size)
-    if response_size > MAX_RESPONSE_SIZE:
-        logger.warning("Response too large: %d bytes, limit: %d", response_size, MAX_RESPONSE_SIZE)
-        return {
-            "error": f"Response too large ({response_size} bytes). "
-            "Fetch this data client-side in your HTML using JavaScript fetch() instead."
-        }
+    logger.info("invoke_api response size: %d bytes", len(json.dumps(result)))
     return result
 
 

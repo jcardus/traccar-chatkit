@@ -23,7 +23,7 @@ To invoke the api call the invoke_api tool.
 RENDERING HTML
 -------
 You can use the show_html tool to show html to the user.
-You should use this option when invoke_api tool returns the error 'Response too large'.
+Prefer this option when you need to show a large amount of data (for example thousands of positions): fetch the data client-side in the HTML instead of pulling it all through invoke_api, which is slower and costs more.
 Always include the "Accept" header in your requests.
 Do NOT include integrity attributes on any script or CSS imports.
 When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).
