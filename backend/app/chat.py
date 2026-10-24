@@ -26,6 +26,7 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
+from .analysis import analyze_data, store_result
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
@@ -235,6 +236,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             show_html,
             ask_support_specialist,
             forward_to_real_agent,
+            analyze_data,
             get_map_template,
             get_openapi_yaml,
         ]
@@ -428,7 +430,9 @@ SAMPLE_MAX_BYTES: Final[int] = 4000
 SAMPLE_MAX_ITEMS: Final[int] = 3
 
 
-def _summarize_large_result(result: Any, size: int) -> dict[str, Any]:
+def _summarize_large_result(
+    result: Any, size: int, stored: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Describe an oversized API result without returning the data itself.
 
     The model gets the shape (count, field names, a few sample records) so it can
@@ -451,12 +455,19 @@ def _summarize_large_result(result: Any, size: int) -> dict[str, Any]:
             key: f"list of {len(value)}" if isinstance(value, list) else type(value).__name__
             for key, value in result.items()
         }
-    summary["next_step"] = (
+    next_step = (
         "Do not retry this exact call. If you are answering a question, narrow the query "
         "(date range, a single device, a limit) or use a summary/aggregate endpoint. If the "
         "user wants to see or browse the data, fetch it client-side with JavaScript fetch() "
         "on the same path under /api/ and render it with show_html."
     )
+    if stored:
+        summary["stored_data"] = stored
+        next_step += (
+            " To compute exact answers over the full data (totals, maximums, counts, "
+            "averages), call analyze_data with stored_data's container_id and path."
+        )
+    summary["next_step"] = next_step
     return summary
 
 
@@ -479,7 +490,8 @@ async def invoke_api(
     logger.info("invoke_api response size: %d bytes", response_size)
     if response_size > MAX_RESPONSE_SIZE:
         logger.warning("Response too large: %d bytes, limit: %d", response_size, MAX_RESPONSE_SIZE)
-        return _summarize_large_result(result, response_size)
+        stored = await store_result(result)
+        return _summarize_large_result(result, response_size, stored)
     return result
 
 
