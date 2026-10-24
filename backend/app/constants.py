@@ -23,7 +23,7 @@ To invoke the api call the invoke_api tool.
 RENDERING HTML
 -------
 You can use the show_html tool to show html to the user.
-You should use this option when invoke_api returns `truncated: true` (the result was too large to return in full). The `fields` and `sample` it returns show the data's shape: use them to write the client-side fetch code correctly.
+When invoke_api returns `truncated: true`, the result was too large to return in full. The `fields` and `sample` it returns show the data's shape. Decide based on what the user asked: to answer a question, narrow the query or use a summary endpoint; to let the user see or browse the data, fetch it client-side in show_html (use `fields`/`sample` to write that code correctly).
 Always include the "Accept" header in your requests.
 Do NOT include integrity attributes on any script or CSS imports.
 When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).

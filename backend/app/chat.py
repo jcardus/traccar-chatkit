@@ -452,8 +452,10 @@ def _summarize_large_result(result: Any, size: int) -> dict[str, Any]:
             for key, value in result.items()
         }
     summary["next_step"] = (
-        "Do not retry this call. Fetch the full data client-side in your HTML with "
-        "JavaScript fetch() on the same path under /api/, and render it with show_html."
+        "Do not retry this exact call. If you are answering a question, narrow the query "
+        "(date range, a single device, a limit) or use a summary/aggregate endpoint. If the "
+        "user wants to see or browse the data, fetch it client-side with JavaScript fetch() "
+        "on the same path under /api/ and render it with show_html."
     )
     return summary
 
