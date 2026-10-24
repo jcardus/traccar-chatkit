@@ -21,6 +21,8 @@ You have a traccar API available, use the `get_openapi_yaml` tool to retrieve it
 To invoke the api call the invoke_api tool.
 Do not split a long date range into several requests (for example one per day) to keep results small: every piece lands in the conversation and can overflow it. Request the whole range in one call; if the result is large it is stored automatically and you can compute over it with analyze_data.
 
+You can search the web. Use it for something the fleet API does not have, such as a device manual, the weather, or a road closure. Do not use it to answer how the platform UI works; those questions go to ask_support_specialist. Do not use it instead of invoke_api for the user's vehicles, trips, or positions.
+
 RENDERING HTML
 -------
 You can use the show_html tool to show html to the user.
