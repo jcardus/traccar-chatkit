@@ -1,0 +1,25 @@
+# Install:
+#   cp backend/chatkit-backend.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now chatkit-backend
+# Logs: journalctl -u chatkit-backend -f      Deploy: git pull && systemctl restart chatkit-backend
+[Unit]
+Description=Traccar ChatKit backend
+After=network.target
+
+[Service]
+Type=simple
+# User= is explicit so systemd sets HOME=/root (uv and the Playwright browser cache live there).
+User=root
+WorkingDirectory=/root/traccar-chatkit/backend
+# KEY=value lines, no "export": OPENAI_API_KEY, DATABASE_URL, CLAUDE_AGENT_URL, ...
+EnvironmentFile=/root/traccar-chatkit/backend/.env
+# node must be on PATH: show_html uses it to syntax-check generated JavaScript.
+# If node comes from nvm, add its bin directory here.
+Environment=PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Match the host/port you run today (check with: ss -ltnp).
+ExecStart=/root/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
