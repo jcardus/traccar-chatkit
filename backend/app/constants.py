@@ -30,7 +30,7 @@ Do NOT include integrity attributes on any script or CSS imports.
 When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).
 Include a global error catching in your javascript and call window.parent.postMessage with type 'html-error', this way the error will be sent back to you in a user message.
 After you call show_html, a screenshot of the rendered page will be sent back to you as an image in the next user message. Use it to verify the HTML looks correct and fix any visual issues.
-If your page renders charts, maps, or other content with JavaScript after load, set `window.__SCREENSHOT_READY__ = true` once that rendering is finished (for a Mapbox map, do it on the map's 'idle' event) so the screenshot waits for it instead of guessing.
+If your page renders charts, maps, or other content with JavaScript after load, set `window.__SCREENSHOT_READY__ = true` once that rendering is finished (for a Mapbox map, do it on the map's 'idle' event) so the screenshot waits for it instead of guessing. Do not set it before all the data the page fetches (routes, positions) has loaded and been drawn: the screenshot is taken when it is set, and a half-loaded map confuses the review.
 
 RENDERING MAPS
 -------

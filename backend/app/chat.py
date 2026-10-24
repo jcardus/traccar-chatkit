@@ -31,6 +31,7 @@ from .analysis import analyze_data, store_result
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MODEL
 from .neon_store import NeonStore
+from .page_traffic import ApiTraffic, wait_until_quiet
 from .support import _user_message_text, ask_support_specialist, forward_to_real_agent
 from .traccar import _get_session_id, _get_traccar_url, invoke
 
@@ -593,6 +594,10 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
                     browser = await p.chromium.launch()
                     try:
                         page = await browser.new_page(viewport={"width": 1280, "height": 720})
+                        traffic = ApiTraffic()
+                        page.on("request", traffic.started)
+                        page.on("requestfinished", traffic.finished)
+                        page.on("requestfailed", traffic.finished)
                         await page.goto(html_url, wait_until="load", timeout=90000)
 
                         # Best-effort network settle. Cap it short: some pages
@@ -621,7 +626,16 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
                                 await page.evaluate(_RENDER_SETTLE_JS)
                             except Exception as exc:  # best effort only
                                 logger.info("render-settle wait skipped: %s", exc)
-                            await page.wait_for_timeout(500)
+
+                        # A page can report ready (e.g. the map's first idle) while the
+                        # data it fetches from /api/ (routes, positions) is still loading,
+                        # which gives the model a half-drawn map. Wait for that data too.
+                        data_loaded = await wait_until_quiet(traffic)
+                        if not data_loaded:
+                            logger.warning(
+                                "Screenshot taken with /api/ requests pending: %s", html_url
+                            )
+                        await page.wait_for_timeout(700)  # let the map draw what just arrived
 
                         await page.screenshot(
                             path=str(screenshot_path), full_page=True, timeout=120000
