@@ -249,7 +249,7 @@ class TraccarThreadItemConverter(ThreadItemConverter):
                 ResponseInputImageParam(
                     type="input_image",
                     image_url=screenshot_url,
-                    detail="low",
+                    detail="high",
                 ),
                 ResponseInputTextParam(
                     type="input_text",
