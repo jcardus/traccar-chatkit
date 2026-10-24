@@ -29,7 +29,7 @@ from openai.types.responses.response_input_image_param import ResponseInputImage
 from .agent_context import TraccarAgentContext
 from .analysis import analyze_data, store_result
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
-from .constants import INSTRUCTIONS, MODEL
+from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
 from .page_traffic import ApiTraffic, wait_until_quiet
 from .support import _user_message_text, ask_support_specialist, forward_to_real_agent
@@ -567,10 +567,28 @@ def _get_user_email_from_traccar(context: dict[str, Any]) -> str | None:
         return None
 
 
+# A pk. token the model retyped, or the placeholder from the map template.
+_MAPBOX_TOKEN_ASSIGNMENT = re.compile(
+    r"(mapboxgl\.accessToken\s*=\s*)(['\"])(?:__MAPBOX_TOKEN__|pk\.[^'\"]*)\2"
+)
+
+
+def restore_mapbox_token(html: str) -> str:
+    """Put the real Mapbox token back. The model drops characters if it retypes it."""
+
+    def replace(match: re.Match[str]) -> str:
+        quote = match.group(2)
+        return f"{match.group(1)}{quote}{MAPBOX_ACCESS_TOKEN}{quote}"
+
+    restored = _MAPBOX_TOKEN_ASSIGNMENT.sub(replace, html)
+    return restored.replace(MAPBOX_TOKEN_PLACEHOLDER, MAPBOX_ACCESS_TOKEN)
+
+
 @function_tool(description_override="Display rendered html to the user")
 async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> dict[str, str]:
     try:
         logger.debug("TOOL: show_html")
+        html = restore_mapbox_token(html)
         js_error = _validate_js_syntax(html)
         if js_error:
             logger.warning("JS validation failed: %s", js_error)

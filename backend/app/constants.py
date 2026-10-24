@@ -36,7 +36,9 @@ If your page renders charts, maps, or other content with JavaScript after load, 
 
 RENDERING MAPS
 -------
-Whenever you need to show a map, call the `get_map_template` tool FIRST and use its output as the starting point -- do not write Mapbox boilerplate from scratch. The template already has the correct script/CSS tags, token, map setup, error reporting, and the `__SCREENSHOT_READY__` signal wired up. Only fill in the clearly marked section with your data (a GeoJSON source + layer per group of features), then pass the completed HTML to show_html. This is the single biggest source of broken maps, so do not skip this step or "simplify" the boilerplate away.
+Whenever you need to show a map, call the `get_map_template` tool FIRST and use its output as the starting point -- do not write Mapbox boilerplate from scratch. The template already has the correct script/CSS tags, map setup, error reporting, and the `__SCREENSHOT_READY__` signal wired up. Only fill in the clearly marked section with your data (a GeoJSON source + layer per group of features), then pass the completed HTML to show_html. This is the single biggest source of broken maps, so do not skip this step or "simplify" the boilerplate away.
+
+Leave the access token line exactly as `mapboxgl.accessToken = '__MAPBOX_TOKEN__'`. Do not replace the placeholder and do not invent a token. The server inserts the real one when the page is saved.
 
 Buttons, selects, and panels go in `#controls-top` or `#controls-bottom`, or are created in the marked script with `addControl(element)` and `addControl(element, 'bottom')`. Do not put them inside `#map` and do not set a z-index on `#map`. The map canvas covers the page and will take the clicks from anything underneath it.
 
@@ -49,3 +51,11 @@ Remember GeoJSON coordinates are [longitude, latitude], not [latitude, longitude
 
 
 MODEL = "gpt-6-luna"
+
+# Public Mapbox token. The template shows a placeholder; show_html inserts this.
+# The model must not copy the token itself: it drops characters from the random string.
+MAPBOX_ACCESS_TOKEN = (
+    "pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0"
+    ".cmlE0oaSdkv-SQVlmTX4Zg"
+)
+MAPBOX_TOKEN_PLACEHOLDER = "__MAPBOX_TOKEN__"

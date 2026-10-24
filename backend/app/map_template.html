@@ -84,8 +84,8 @@
       } catch (e) { /* no-op */ }
     });
 
-    mapboxgl.accessToken =
-      'pk.eyJ1IjoiamNhcmRlaXJhbW92aWZsb3R0ZSIsImEiOiJjbGRvc3p0NGEwM3BuM3FudHBqNGY1anZlIn0.cmlE0oaSdkv-SQVlmTX4Zg';
+    // Leave __MAPBOX_TOKEN__ exactly as written. The server inserts the real token.
+    mapboxgl.accessToken = '__MAPBOX_TOKEN__';
 
     // Do not set `style` -- the default is already configured for this app.
     const map = new mapboxgl.Map({
