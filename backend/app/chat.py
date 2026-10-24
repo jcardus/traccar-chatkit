@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
-from agents import Agent, RunContextWrapper, Runner, function_tool
+from agents import Agent, RunContextWrapper, Runner, WebSearchTool, function_tool
 from chatkit.agents import ClientToolCall, ThreadItemConverter, stream_agent_response
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
 from chatkit.types import ClientToolCallItem, HiddenContextItem, ThreadMetadata, UserMessageItem
@@ -272,6 +272,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             analyze_data,
             get_map_template,
             get_openapi_yaml,
+            WebSearchTool(),
         ]
         self.assistant = Agent[TraccarAgentContext](
             model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=cast(Any, tools)
