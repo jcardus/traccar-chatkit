@@ -19,11 +19,10 @@ class SummarizeLargeResultTests(unittest.TestCase):
         self.assertEqual(summary["fields"], ["id", "latitude", "longitude"])
         self.assertEqual(summary["sample"], result[:SAMPLE_MAX_ITEMS])
         self.assertIn("999999", summary["reason"])
-        self.assertIn("shorter", summary["next_step"])
-        self.assertIn("client-side", summary["next_step"])
-        self.assertIn("Do not retry", summary["next_step"])
-        self.assertIn("one request per device", summary["next_step"])
+        self.assertIn("Do not retry this same call", summary["next_step"])
         self.assertIn("too large to store", summary["next_step"])
+        self.assertNotIn("device", summary["next_step"])
+        self.assertNotIn("client-side", summary["next_step"])
 
     def test_fields_are_the_union_across_items(self):
         result = [{"a": 1}, {"b": 2}, "not-a-dict"]

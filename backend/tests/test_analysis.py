@@ -16,8 +16,10 @@ from agents import CodeInterpreterTool, RunContextWrapper
 from app.analysis import (
     ANALYST_INSTRUCTIONS,
     CONTAINER_IDLE_MINUTES,
+    FILE_CHECK_INSTRUCTIONS,
     MANIFEST_NAME,
     analyze_data,
+    file_can_be_analyzed,
     store_result,
     store_unparsed,
 )
@@ -28,11 +30,29 @@ from app.chat import _summarize_large_result
 def _fake_client():
     client = MagicMock()
     client.containers.create = AsyncMock(return_value=SimpleNamespace(id="cntr_1"))
+    created: list[SimpleNamespace] = []
 
     async def create_file(_container_id, file):
-        return SimpleNamespace(path=f"/mnt/data/{file[0]}")
+        record = SimpleNamespace(
+            id=f"cfile_{len(created)}",
+            path=f"/mnt/data/{file[0]}",
+            bytes=len(file[1]),
+            source="user",
+            container_id="cntr_1",
+        )
+        created.append(record)
+        return record
+
+    class _Page:
+        def __aiter__(self):
+            async def generate():
+                for item in created:
+                    yield item
+
+            return generate()
 
     client.containers.files.create = AsyncMock(side_effect=create_file)
+    client.containers.files.list = lambda container_id: _Page()
     return client
 
 
@@ -41,7 +61,12 @@ class StoreResultTests(unittest.IsolatedAsyncioTestCase):
         client = _fake_client()
         with patch("app.analysis.AsyncOpenAI", return_value=client):
             stored = await store_result([{"id": 1}, {"id": 2}])
-        self.assertEqual(stored, {"container_id": "cntr_1", "path": "/mnt/data/data.json"})
+        self.assertEqual(stored["container_id"], "cntr_1")
+        self.assertEqual(stored["path"], "/mnt/data/data.json")
+        self.assertEqual(stored["files"][0]["id"], "cfile_0")
+        self.assertEqual(stored["files"][0]["path"], "/mnt/data/data.json")
+        self.assertEqual(stored["files"][0]["source"], "user")
+        self.assertGreater(stored["files"][0]["bytes"], 0)
         create_kwargs = client.containers.create.await_args.kwargs
         self.assertEqual(
             create_kwargs["expires_after"],
@@ -210,10 +235,10 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         analyst, prompt = run.await_args.args
         self.assertIn("/mnt/data/data.json", prompt)
         self.assertIn("max speed?", prompt)
-        self.assertIn(".json.gz", prompt)
-        self.assertIn("fleet-parts-manifest.json", prompt)
+        self.assertIn("Decide how to read", prompt)
         self.assertIn(".json.gz", ANALYST_INSTRUCTIONS)
         self.assertIn("fleet-parts-manifest.json", ANALYST_INSTRUCTIONS)
+        self.assertIn("You decide how to read", ANALYST_INSTRUCTIONS)
         (tool,) = analyst.tools
         self.assertIsInstance(tool, CodeInterpreterTool)
         self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
@@ -221,7 +246,34 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
     async def test_failure_returns_a_recoverable_message(self):
         answer = await self._call(AsyncMock(side_effect=RuntimeError("expired")))
         self.assertIn("analysis failed", answer)
-        self.assertIn("show_html", answer)
+        self.assertIn("Narrow the query", answer)
+        self.assertNotIn("client-side", answer)
+
+
+class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
+    async def test_asks_from_the_description_without_opening_the_file(self):
+        ctx = RunContextWrapper(context=SimpleNamespace())
+        args = json.dumps(
+            {
+                "container_id": "cntr_1",
+                "path": "/mnt/data/data.json.gz",
+                "file_bytes": 16665642,
+                "uncompressed_bytes": 222290669,
+                "contents": "JSON array of positions. Fields: deviceId, latitude. Sample: [{\"deviceId\": 761}]",
+            }
+        )
+        run = AsyncMock(return_value=SimpleNamespace(final_output="not analyzable\nThe JSON is too large to load."))
+        with patch("app.analysis.Runner.run", new=run):
+            answer = await file_can_be_analyzed.on_invoke_tool(ctx, args)
+        self.assertIn("not analyzable", answer)
+        checker, prompt = run.await_args.args
+        self.assertEqual(checker.tools, [])
+        self.assertIn("whether it is analyzable", FILE_CHECK_INSTRUCTIONS)
+        self.assertIn("/mnt/data/data.json.gz", prompt)
+        self.assertIn("222290669", prompt)
+        self.assertIn("deviceId", prompt)
+        self.assertIn("Can this file be analyzed?", prompt)
+        self.assertNotIn("json.load", prompt)
 
 
 class SummaryWithStoredDataTests(unittest.TestCase):
@@ -229,8 +281,11 @@ class SummaryWithStoredDataTests(unittest.TestCase):
         stored = {"container_id": "cntr_1", "path": "/mnt/data/data.json"}
         summary = _summarize_large_result([{"a": 1}], 10, stored)
         self.assertEqual(summary["stored_data"], stored)
+        self.assertIn("You decide the next step", summary["next_step"])
+        self.assertIn("file_can_be_analyzed", summary["next_step"])
         self.assertIn("analyze_data", summary["next_step"])
-        self.assertIn("one request per device", summary["next_step"])
+        self.assertIn("Do not retry this same call", summary["next_step"])
+        self.assertNotIn("device", summary["next_step"])
 
     def test_no_handle_or_hint_when_upload_failed(self):
         summary = _summarize_large_result([{"a": 1}], 10, None)

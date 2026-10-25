@@ -40,14 +40,11 @@ _VALUE_END = _WS | {ord(","), ord("]")}
 ANALYST_INSTRUCTIONS = """
 You are a data analyst for a GPS fleet tracking platform.
 
-A JSON file from the platform API is available in the code interpreter at the path you are given.
-Load it with Python and compute exactly what is asked. Never estimate; compute.
-Answer concisely with the computed numbers.
+A JSON file from the platform API is in the code interpreter at the path you are given.
+A path ending in .json.gz is gzip-compressed JSON. A path ending in fleet-parts-manifest.json lists part paths. Any other path is JSON.
 
-How to load the file:
-- If the path ends with fleet-parts-manifest.json, it is a split dataset. JSON-load it, then load every path in its "parts" list, in order. Concatenate them when they are lists.
-- If a path ends with .json.gz, it is gzip-compressed JSON: json.load(gzip.open(path)).
-- Otherwise JSON-load the file; that value is the data.
+You decide how to read the file and how to compute the answer. Never estimate; compute.
+Answer concisely with the computed numbers.
 
 Speeds in the data are in knots. Report speeds in km/h (multiply by 1.852).
 Never mention that the platform backend is Traccar.
@@ -309,17 +306,34 @@ async def _upload_parts(parts: list[tuple[str, bytes, str]]) -> dict[str, str] |
             )
             path = uploaded.path
             uploaded_bytes += len(manifest)
+        files = await _listed_files(client, container.id)
     except Exception:
         logger.exception("Failed to store large result for analysis")
         return None
     logger.info(
-        "Stored large result in %s at %s (%d bytes uploaded, %d file(s))",
+        "Stored large result in %s at %s (%d bytes uploaded, %d file(s)); container lists %s",
         container.id,
         path,
         uploaded_bytes,
         len(uploaded_paths) if len(uploaded_paths) == 1 else len(uploaded_paths) + 1,
+        files,
     )
-    return {"container_id": container.id, "path": path}
+    return {"container_id": container.id, "path": path, "files": files}
+
+
+async def _listed_files(client, container_id: str) -> list[dict[str, Any]]:
+    """Read the container's own file list, so an upload is confirmed by a second call."""
+    listed: list[dict[str, Any]] = []
+    async for item in client.containers.files.list(container_id):
+        listed.append(
+            {
+                "id": item.id,
+                "path": item.path,
+                "bytes": item.bytes,
+                "source": item.source,
+            }
+        )
+    return listed
 
 
 async def store_result(result: Any) -> dict[str, str] | None:
@@ -347,6 +361,58 @@ async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
     return await _upload_parts(parts)
 
 
+FILE_CHECK_INSTRUCTIONS = """
+You decide whether a stored data file can be analyzed, and how.
+You do not have the file. You only have the description you are given.
+Say whether it is analyzable and what approach you would use. Do not compute the user's answer from the sample.
+"""
+
+
+@function_tool(
+    description_override=(
+        "Ask whether a stored file can be analyzed. Pass the container_id, path, "
+        "file byte size, uncompressed size, and a description of what the file contains "
+        "(fields and a few sample records). Does not load the file or compute an answer."
+    )
+)
+async def file_can_be_analyzed(
+    container_id: str,
+    path: str,
+    file_bytes: int,
+    uncompressed_bytes: int,
+    contents: str,
+) -> str:
+    logger.info(
+        "TOOL: file_can_be_analyzed container=%s path=%s file_bytes=%s uncompressed=%s",
+        container_id,
+        path,
+        file_bytes,
+        uncompressed_bytes,
+    )
+    checker = Agent(
+        name="File check",
+        model=MODEL,
+        instructions=FILE_CHECK_INSTRUCTIONS,
+        tools=[],
+    )
+    prompt = (
+        f"container_id: {container_id}\n"
+        f"path: {path}\n"
+        f"file bytes: {file_bytes}\n"
+        f"uncompressed bytes: {uncompressed_bytes}\n"
+        f"what the file contains:\n{contents}\n\n"
+        "Can this file be analyzed?"
+    )
+    start = time.monotonic()
+    try:
+        run = await Runner.run(checker, prompt)
+    except Exception:
+        logger.exception("file_can_be_analyzed failed after %.2fs", time.monotonic() - start)
+        return "The file check failed. Report the stored file listing and do not estimate an answer."
+    logger.info("file_can_be_analyzed took %.2fs", time.monotonic() - start)
+    return str(run.final_output)
+
+
 @function_tool(
     description_override=(
         "Compute exact answers over a large stored API result using Python (totals, maximums, "
@@ -369,16 +435,13 @@ async def analyze_data(container_id: str, path: str, question: str) -> str:
         run = await Runner.run(
             analyst,
             f"The data file is at {path}.\n"
-            "If the path ends with .json.gz, decompress it before parsing. "
-            "If it ends with fleet-parts-manifest.json, load every path in its "
-            "parts list, in order, and concatenate lists.\n\n"
+            "Decide how to read it and compute the answer.\n\n"
             f"{question}",
         )
     except Exception:
         logger.exception("analyze_data failed after %.2fs", time.monotonic() - start)
         return (
-            "The analysis failed (the stored data may have expired). "
-            "Narrow the query or fetch the data client-side in show_html instead."
+            "The analysis failed (the stored data may have expired). Narrow the query."
         )
     logger.info("analyze_data took %.2fs", time.monotonic() - start)
     return str(run.final_output)

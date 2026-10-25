@@ -34,7 +34,7 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
-from .analysis import analyze_data, store_result, store_unparsed
+from .analysis import analyze_data, file_can_be_analyzed, store_result, store_unparsed
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
@@ -395,6 +395,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             ask_support_specialist,
             forward_to_real_agent,
             analyze_data,
+            file_can_be_analyzed,
             get_map_template,
             get_openapi_yaml,
             WebSearchTool(),
@@ -603,8 +604,7 @@ def _summarize_large_result(
 ) -> dict[str, Any]:
     """Describe an oversized API result without returning the data itself.
 
-    The model gets the shape (count, field names, a few sample records) so it can
-    write correct client-side fetch code in show_html instead of retrying.
+    The model gets the shape (count, field names, a few sample records).
     """
     summary: dict[str, Any] = {
         "truncated": True,
@@ -632,20 +632,12 @@ def _summarize_large_result(
 def _large_result_next_step(stored: bool) -> str:
     if stored:
         return (
-            "Do not retry this call or split it into one request per device. "
-            "The full result is stored. To compute exact answers (totals, maximums, "
-            "counts, averages, filtering), call analyze_data with stored_data's "
-            "container_id and path. If the user wants to see or browse the data, "
-            "fetch it client-side with JavaScript fetch() on the same path under "
-            "/api/ and render it with show_html."
+            "Do not retry this same call. "
+            "The full result is stored. stored_data.files is the container's listing. "
+            "You decide the next step. You may call file_can_be_analyzed, analyze_data, "
+            "or both. You choose the question and the method."
         )
-    return (
-        "Do not retry this call or split it into one request per device. "
-        "The result was too large to store. Narrow to one device and a shorter "
-        "date range, or use a summary/aggregate endpoint. If the user wants to "
-        "see or browse the data, fetch it client-side with JavaScript fetch() "
-        "on the same path under /api/ and render it with show_html."
-    )
+    return "Do not retry this same call. The result was too large to store."
 
 
 def _summarize_handed_off(body: UnparsedBody, stored: dict[str, str] | None) -> dict[str, Any]:

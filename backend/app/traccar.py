@@ -254,8 +254,7 @@ def timeout_error_message(
     return (
         f"The server did not answer {method.upper()} {_call_target(path, query)} "
         f"within {seconds:.0f}s. "
-        "Do not retry this same request. Use a shorter date range and one device, "
-        "or a summary or trips report instead of a long span of raw positions or routes."
+        "Do not retry this same request."
     )
 
 
@@ -267,8 +266,7 @@ def incomplete_body_message(
         f"The server answered {method.upper()} {_call_target(path, query)} "
         f"with HTTP {status_code} but the body was incomplete ({received} bytes received). "
         "Do not treat a partial result as the total. "
-        "Do not retry this same request. Use a shorter date range and one device, "
-        "or a summary or trips report instead of a long span of raw positions or routes."
+        "Do not retry this same request."
     )
 
 
