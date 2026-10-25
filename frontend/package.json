@@ -16,7 +16,7 @@
     "npm": ">=9"
   },
   "dependencies": {
-    "@openai/chatkit-react": "^1.6.1",
+    "@traccar/assistant-ui": "git+https://github.com/jcardus/traccar-assistant-ui.git#23eee8809f9baea54a77f54603d5a23d67d17456",
     "@turf/bbox": "^7.2.0",
     "lucide-react": "^0.544.0",
     "maplibre-gl": "^5.9.0",
