@@ -34,7 +34,7 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
-from .analysis import analyze_data, file_can_be_analyzed, store_result, store_unparsed
+from .analysis import analyze_data, store_result, store_unparsed
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
@@ -395,7 +395,6 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             ask_support_specialist,
             forward_to_real_agent,
             analyze_data,
-            file_can_be_analyzed,
             get_map_template,
             get_openapi_yaml,
             WebSearchTool(),
@@ -634,9 +633,7 @@ def _large_result_next_step(stored: bool) -> str:
         return (
             "Do not retry this same call. "
             "The full result is stored. stored_data.files is the container's listing. "
-            "You decide the next step. file_can_be_analyzed opens the file in this container "
-            "and reports whether that read worked. If that read fails, do not call "
-            "analyze_data. If it works, you may call analyze_data and you choose the question."
+            "You may call analyze_data. You choose the question."
         )
     return "Do not retry this same call. The result was too large to store."
 

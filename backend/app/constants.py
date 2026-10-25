@@ -25,7 +25,7 @@ You can search the web. Use it for something the fleet API does not have, such a
 RENDERING HTML
 -------
 You can use the show_html tool to show html to the user.
-When invoke_api returns `truncated: true`, the result was too large to return in full. The `fields` and `sample` it returns show the data's shape. If `stored_data` is present, the full result is already stored. file_can_be_analyzed opens that file and reports whether the read worked. If that read fails, do not call analyze_data. If it works, you may call analyze_data and you choose the question. Do not call invoke_api again for the same data. If `stored_data` is absent, the result could not be stored.
+When invoke_api returns `truncated: true`, the result was too large to return in full. The `fields` and `sample` it returns show the data's shape. If `stored_data` is present, the full result is already stored. You may call analyze_data and you choose the question. Do not call invoke_api again for the same data. If `stored_data` is absent, the result could not be stored.
 Always include the "Accept" header in your requests.
 Do NOT include integrity attributes on any script or CSS imports.
 When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).

@@ -16,10 +16,9 @@ from agents import CodeInterpreterTool, RunContextWrapper
 from app.analysis import (
     ANALYST_INSTRUCTIONS,
     CONTAINER_IDLE_MINUTES,
-    FILE_CHECK_INSTRUCTIONS,
     MANIFEST_NAME,
+    _memory_limit,
     analyze_data,
-    file_can_be_analyzed,
     store_result,
     store_unparsed,
 )
@@ -72,6 +71,7 @@ class StoreResultTests(unittest.IsolatedAsyncioTestCase):
             create_kwargs["expires_after"],
             {"anchor": "last_active_at", "minutes": CONTAINER_IDLE_MINUTES},
         )
+        self.assertEqual(create_kwargs["extra_body"], {"memory_limit": "1g"})
         args, kwargs = client.containers.files.create.await_args
         self.assertEqual(args, ("cntr_1",))
         name, payload, content_type = kwargs["file"]
@@ -175,6 +175,22 @@ class StoreUnparsedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content_type, "application/gzip")
         self.assertEqual(uploaded, payload)
         self.assertEqual(json.loads(gzip.decompress(uploaded)), items)
+        self.assertEqual(
+            client.containers.create.await_args.kwargs["extra_body"],
+            {"memory_limit": "1g"},
+        )
+
+    async def test_picks_4g_for_a_260mb_file(self):
+        payload = gzip.compress(b"[]")
+        body = UnparsedBody(payload, compressed=True, uncompressed_size=259_773_160)
+        client = _fake_client()
+        with patch("app.analysis.AsyncOpenAI", return_value=client):
+            stored = await store_unparsed(body)
+        self.assertEqual(stored["path"], "/mnt/data/data.json.gz")
+        self.assertEqual(
+            client.containers.create.await_args.kwargs["extra_body"],
+            {"memory_limit": "4g"},
+        )
 
     async def test_splits_a_gzip_that_exceeds_the_container_limit(self):
         items = [
@@ -250,42 +266,15 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("client-side", answer)
 
 
-class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
-    async def _call(self, run):
-        ctx = RunContextWrapper(context=SimpleNamespace())
-        args = json.dumps(
-            {
-                "container_id": "cntr_1",
-                "path": "/mnt/data/data.json.gz",
-                "file_bytes": 16665642,
-                "uncompressed_bytes": 222290669,
-                "contents": "JSON array of positions. Fields: deviceId, latitude. Sample: [{\"deviceId\": 761}]",
-            }
-        )
-        with patch("app.analysis.Runner.run", new=run):
-            return await file_can_be_analyzed.on_invoke_tool(ctx, args)
-
-    async def test_opens_the_file_in_the_container(self):
-        run = AsyncMock(return_value=SimpleNamespace(final_output="The read worked."))
-        answer = await self._call(run)
-        self.assertEqual(answer, "The read worked.")
-        checker, prompt = run.await_args.args
-        self.assertIn("Open the file", FILE_CHECK_INSTRUCTIONS)
-        self.assertIn("Do not compute the user's answer", FILE_CHECK_INSTRUCTIONS)
-        self.assertIn("/mnt/data/data.json.gz", prompt)
-        self.assertIn("222290669", prompt)
-        self.assertIn("deviceId", prompt)
-        self.assertIn("Open the file", prompt)
-        self.assertNotIn("json.load", prompt)
-        (tool,) = checker.tools
-        self.assertIsInstance(tool, CodeInterpreterTool)
-        self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
-
-    async def test_failure_says_not_to_analyze_that_container(self):
-        answer = await self._call(AsyncMock(side_effect=RuntimeError("sandbox")))
-        self.assertIn("file read failed", answer)
-        self.assertIn("Do not call analyze_data", answer)
-        self.assertNotIn("expired", answer)
+class MemoryLimitTests(unittest.TestCase):
+    def test_picks_the_smallest_tier_that_holds_five_times_the_text(self):
+        self.assertEqual(_memory_limit(0), "1g")
+        self.assertEqual(_memory_limit(200 * 1024 * 1024), "1g")
+        self.assertEqual(_memory_limit(222_290_669), "4g")
+        self.assertEqual(_memory_limit(259_773_160), "4g")
+        self.assertEqual(_memory_limit(1 << 30), "16g")
+        self.assertEqual(_memory_limit(4 << 30), "64g")
+        self.assertEqual(_memory_limit(16 << 30), "64g")
 
 
 class SummaryWithStoredDataTests(unittest.TestCase):
@@ -293,9 +282,8 @@ class SummaryWithStoredDataTests(unittest.TestCase):
         stored = {"container_id": "cntr_1", "path": "/mnt/data/data.json"}
         summary = _summarize_large_result([{"a": 1}], 10, stored)
         self.assertEqual(summary["stored_data"], stored)
-        self.assertIn("You decide the next step", summary["next_step"])
-        self.assertIn("file_can_be_analyzed", summary["next_step"])
         self.assertIn("analyze_data", summary["next_step"])
+        self.assertNotIn("file_can_be_analyzed", summary["next_step"])
         self.assertIn("Do not retry this same call", summary["next_step"])
         self.assertNotIn("device", summary["next_step"])
 
