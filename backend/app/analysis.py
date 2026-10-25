@@ -5,12 +5,14 @@ instead. A small analyst agent with the code interpreter answers questions over
 the full file, so only its short answer reaches the main model.
 
 Container files are capped at 50 MiB. Larger results are gzipped, then split
-into parts when the gzip itself exceeds the cap.
+into parts when the gzip itself exceeds the cap. A body that is already too
+large to parse on this host is uploaded as the gzip it arrived in.
 """
 
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import logging
 import time
@@ -20,6 +22,7 @@ from agents import Agent, CodeInterpreterTool, Runner, function_tool
 from openai import AsyncOpenAI
 
 from .constants import MODEL
+from .traccar import UnparsedBody
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,11 @@ CONTAINER_IDLE_MINUTES = 20
 MAX_CONTAINER_FILE_BYTES = 50 * 1024 * 1024 - 65_536
 MAX_CONTAINER_PARTS = 40
 MANIFEST_NAME = "fleet-parts-manifest.json"
+# Raw JSON per split part. Gzip of this is under the container cap even when
+# the text does not compress.
+_PART_RAW_LIMIT = 32 * 1024 * 1024
+_WS = frozenset((0x20, 0x09, 0x0A, 0x0D))
+_VALUE_END = _WS | {ord(","), ord("]")}
 
 ANALYST_INSTRUCTIONS = """
 You are a data analyst for a GPS fleet tracking platform.
@@ -104,16 +112,179 @@ def _pack_list(items: list[Any], gzip_bytes: int) -> list[tuple[str, bytes, str]
     return parts
 
 
-async def store_result(result: Any) -> dict[str, str] | None:
-    """Upload a result to a fresh code-interpreter container.
+def _pack_unparsed(body: UnparsedBody) -> list[tuple[str, bytes, str]] | None:
+    """Pack wire bytes that were never parsed.
 
-    Returns the container id and file path, or None if the result cannot fit
-    or the upload failed. The path is a gzip file or a parts manifest when the
-    raw JSON exceeds the container file limit.
+    A gzip that already fits is uploaded unchanged. Anything larger is split
+    from a stream so the uncompressed document is not held as one buffer.
     """
-    parts = _pack(result)
-    if not parts:
+    if body.compressed and len(body.payload) >= 2 and body.payload[:2] == b"\x1f\x8b":
+        if len(body.payload) <= MAX_CONTAINER_FILE_BYTES:
+            return [("data.json.gz", body.payload, "application/gzip")]
+        try:
+            with gzip.GzipFile(fileobj=io.BytesIO(body.payload)) as handle:
+                return _parts_from_stream(handle)
+        except (OSError, EOFError, gzip.BadGzipFile):
+            logger.warning("Could not split a %d byte gzip for the container", len(body.payload))
+            return None
+    if len(body.payload) <= MAX_CONTAINER_FILE_BYTES:
+        return [("data.json", body.payload, "application/json")]
+    compressed = gzip.compress(body.payload, compresslevel=6)
+    if len(compressed) <= MAX_CONTAINER_FILE_BYTES:
+        return [("data.json.gz", compressed, "application/gzip")]
+    return _parts_from_stream(io.BytesIO(body.payload))
+
+
+def _parts_from_stream(stream) -> list[tuple[str, bytes, str]] | None:
+    splitter = _ArraySplitter(_PART_RAW_LIMIT)
+    while True:
+        chunk = stream.read(65_536)
+        if not chunk:
+            break
+        splitter.feed(chunk)
+        if splitter.failed or splitter.done:
+            break
+    groups = splitter.finish()
+    if not groups:
+        logger.warning("Unparsed result is not a JSON array that can be split")
         return None
+    packed: list[bytes] = []
+    for group in groups:
+        payload = gzip.compress(b"[" + b",".join(group) + b"]", compresslevel=6)
+        if len(payload) > MAX_CONTAINER_FILE_BYTES:
+            logger.warning(
+                "A split part gzipped to %d bytes; cannot store under %d",
+                len(payload),
+                MAX_CONTAINER_FILE_BYTES,
+            )
+            return None
+        packed.append(payload)
+    if len(packed) == 1:
+        return [("data.json.gz", packed[0], "application/gzip")]
+    return [
+        (f"part-{index + 1:03d}.json.gz", payload, "application/gzip")
+        for index, payload in enumerate(packed)
+    ]
+
+
+class _ArraySplitter:
+    """Split a JSON array into raw element groups without parsing values."""
+
+    def __init__(self, raw_limit: int):
+        self.raw_limit = raw_limit
+        self.parts: list[list[bytes]] = []
+        self.current: list[bytes] = []
+        self.current_len = 0
+        self.failed = False
+        self.done = False
+        self._mode = "start"
+        self._depth = 0
+        self._string = False
+        self._escape = False
+        self._element = bytearray()
+
+    def feed(self, chunk: bytes) -> None:
+        if self.failed or self.done:
+            return
+        for byte in chunk:
+            self._byte(byte)
+            if self.failed or self.done:
+                return
+
+    def finish(self) -> list[list[bytes]] | None:
+        if self.failed or not self.done:
+            return None
+        self._flush()
+        if self.failed or not self.parts:
+            return None
+        return self.parts
+
+    def _byte(self, byte: int) -> None:
+        if self._mode == "start":
+            if byte in _WS:
+                return
+            if byte != ord("["):
+                self.failed = True
+                return
+            self._mode = "between"
+            return
+        if self._mode == "between":
+            if byte in _WS or byte == ord(","):
+                return
+            if byte == ord("]"):
+                self.done = True
+                self._mode = "done"
+                return
+            self._mode = "value"
+            self._depth = 0
+            self._string = False
+            self._escape = False
+            self._element = bytearray()
+        if self._mode != "value":
+            return
+        if self._string:
+            self._element.append(byte)
+            if self._escape:
+                self._escape = False
+            elif byte == ord("\\"):
+                self._escape = True
+            elif byte == ord('"'):
+                self._string = False
+                if self._depth == 0:
+                    self._finish_element()
+                    self._mode = "between"
+            return
+        if self._depth == 0 and byte in _VALUE_END:
+            if self._element:
+                self._finish_element()
+            if byte == ord("]"):
+                self.done = True
+                self._mode = "done"
+            else:
+                self._mode = "between"
+            return
+        self._element.append(byte)
+        if byte == ord('"'):
+            self._string = True
+        elif byte in (ord("{"), ord("[")):
+            self._depth += 1
+        elif byte in (ord("}"), ord("]")):
+            self._depth -= 1
+            if self._depth < 0:
+                self.failed = True
+                return
+            if self._depth == 0:
+                self._finish_element()
+                self._mode = "between"
+
+    def _finish_element(self) -> None:
+        element = bytes(self._element)
+        self._element = bytearray()
+        if not element or self.failed:
+            return
+        extra = len(element) + (1 if self.current else 0)
+        if self.current and self.current_len + extra > self.raw_limit:
+            self._flush()
+            extra = len(element)
+        if not self.current and extra > self.raw_limit:
+            self.parts.append([element])
+            if len(self.parts) > MAX_CONTAINER_PARTS:
+                self.failed = True
+            return
+        self.current.append(element)
+        self.current_len += extra
+
+    def _flush(self) -> None:
+        if not self.current:
+            return
+        self.parts.append(self.current)
+        self.current = []
+        self.current_len = 0
+        if len(self.parts) > MAX_CONTAINER_PARTS:
+            self.failed = True
+
+
+async def _upload_parts(parts: list[tuple[str, bytes, str]]) -> dict[str, str] | None:
     try:
         client = AsyncOpenAI()
         container = await client.containers.create(
@@ -149,6 +320,31 @@ async def store_result(result: Any) -> dict[str, str] | None:
         len(uploaded_paths) if len(uploaded_paths) == 1 else len(uploaded_paths) + 1,
     )
     return {"container_id": container.id, "path": path}
+
+
+async def store_result(result: Any) -> dict[str, str] | None:
+    """Upload a result to a fresh code-interpreter container.
+
+    Returns the container id and file path, or None if the result cannot fit
+    or the upload failed. The path is a gzip file or a parts manifest when the
+    raw JSON exceeds the container file limit.
+    """
+    parts = _pack(result)
+    if not parts:
+        return None
+    return await _upload_parts(parts)
+
+
+async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
+    """Upload response bytes that were never parsed.
+
+    A gzip that fits the container is uploaded as those exact bytes. Returns
+    the container id and file path, or None when the file cannot fit.
+    """
+    parts = _pack_unparsed(body)
+    if not parts:
+        return None
+    return await _upload_parts(parts)
 
 
 @function_tool(

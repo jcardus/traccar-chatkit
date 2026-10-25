@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Final, cast
 from uuid import uuid4
 
+import requests
 from agents import Agent, RunContextWrapper, Runner, WebSearchTool, function_tool
 from chatkit.agents import ClientToolCall, ThreadItemConverter, stream_agent_response
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
@@ -33,13 +34,21 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
-from .analysis import analyze_data, store_result
+from .analysis import analyze_data, store_result, store_unparsed
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
 from .page_traffic import ApiTraffic, wait_until_quiet
 from .support import _user_message_text, ask_support_specialist, forward_to_real_agent
-from .traccar import _get_session_id, _get_traccar_url, invoke
+from .traccar import (
+    IncompleteResponse,
+    UnparsedBody,
+    _get_session_id,
+    _get_traccar_url,
+    incomplete_body_message,
+    invoke,
+    timeout_error_message,
+)
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -471,7 +480,7 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
         finally:
             # finally (not a plain trailing log line) so this still fires if the
             # client disconnects / the request is cancelled mid-stream -- that
-            # cancellation *is* what a Vercel proxy timeout looks like from here,
+            # cancellation *is* what a Cloudflare proxy read timeout looks like from here,
             # and a bare statement after the loop would silently never run.
             logger.debug(
                 "agent run: thread=%s events=%d took %.2fs",
@@ -614,9 +623,15 @@ def _summarize_large_result(
             key: f"list of {len(value)}" if isinstance(value, list) else type(value).__name__
             for key, value in result.items()
         }
+    summary["next_step"] = _large_result_next_step(stored is not None)
     if stored:
         summary["stored_data"] = stored
-        next_step = (
+    return summary
+
+
+def _large_result_next_step(stored: bool) -> str:
+    if stored:
+        return (
             "Do not retry this call or split it into one request per device. "
             "The full result is stored. To compute exact answers (totals, maximums, "
             "counts, averages, filtering), call analyze_data with stored_data's "
@@ -624,15 +639,37 @@ def _summarize_large_result(
             "fetch it client-side with JavaScript fetch() on the same path under "
             "/api/ and render it with show_html."
         )
-    else:
-        next_step = (
-            "Do not retry this call or split it into one request per device. "
-            "The result was too large to store. Narrow to one device and a shorter "
-            "date range, or use a summary/aggregate endpoint. If the user wants to "
-            "see or browse the data, fetch it client-side with JavaScript fetch() "
-            "on the same path under /api/ and render it with show_html."
+    return (
+        "Do not retry this call or split it into one request per device. "
+        "The result was too large to store. Narrow to one device and a shorter "
+        "date range, or use a summary/aggregate endpoint. If the user wants to "
+        "see or browse the data, fetch it client-side with JavaScript fetch() "
+        "on the same path under /api/ and render it with show_html."
+    )
+
+
+def _summarize_handed_off(body: UnparsedBody, stored: dict[str, str] | None) -> dict[str, Any]:
+    """Describe a response that was stored as a file and never parsed."""
+    size = body.uncompressed_size if body.uncompressed_size is not None else len(body.payload)
+    if body.compressed and body.uncompressed_size is not None:
+        reason = (
+            f"Response too large ({body.uncompressed_size} bytes uncompressed, "
+            f"{len(body.payload)} bytes gzip) to load."
         )
-    summary["next_step"] = next_step
+    else:
+        reason = f"Response too large ({size} bytes) to load."
+    reason += (
+        " The file is stored for analysis." if stored else " It could not be stored."
+    )
+    summary: dict[str, Any] = {"truncated": True, "reason": reason}
+    if body.sample:
+        dicts = [item for item in body.sample if isinstance(item, dict)]
+        if dicts:
+            summary["fields"] = sorted({key for item in dicts for key in item})
+        summary["sample"] = body.sample
+    summary["next_step"] = _large_result_next_step(stored is not None)
+    if stored:
+        summary["stored_data"] = stored
     return summary
 
 
@@ -643,12 +680,21 @@ async def invoke_api(
     path: str,
     body: str = "",
 ):
-    result = invoke(
-        method,
-        path,
-        body,
-        ctx.context.request_context.get("request"),
-    )
+    request = ctx.context.request_context.get("request")
+    try:
+        # Off the event loop: a long Traccar read must not stop SSE keepalive.
+        result = await asyncio.to_thread(invoke, method, path, body, request)
+    except requests.ConnectTimeout:
+        return {"error": timeout_error_message(method, path, connect=True)}
+    except IncompleteResponse as exc:
+        return {
+            "error": incomplete_body_message(method, path, exc.status_code, exc.received)
+        }
+    except requests.Timeout:
+        return {"error": timeout_error_message(method, path)}
+    if isinstance(result, UnparsedBody):
+        stored = await store_unparsed(result)
+        return _summarize_handed_off(result, stored)
     response_size = len(json.dumps(result))
     logger.log(
         logging.INFO if response_size >= 100_000 else logging.DEBUG,

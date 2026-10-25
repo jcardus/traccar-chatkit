@@ -19,7 +19,9 @@ from app.analysis import (
     MANIFEST_NAME,
     analyze_data,
     store_result,
+    store_unparsed,
 )
+from app.traccar import UnparsedBody
 from app.chat import _summarize_large_result
 
 
@@ -131,6 +133,64 @@ class StoreResultTests(unittest.IsolatedAsyncioTestCase):
             patch("app.analysis.MAX_CONTAINER_FILE_BYTES", 32),
         ):
             self.assertIsNone(await store_result(blob))
+        client.containers.create.assert_not_awaited()
+
+
+class StoreUnparsedTests(unittest.IsolatedAsyncioTestCase):
+    async def test_uploads_the_gzip_bytes_unchanged(self):
+        items = [{"id": 1, "deviceId": 761, "note": 'keep "]"'}]
+        payload = gzip.compress(json.dumps(items).encode())
+        body = UnparsedBody(payload, compressed=True, uncompressed_size=10_000_000)
+        client = _fake_client()
+        with patch("app.analysis.AsyncOpenAI", return_value=client):
+            stored = await store_unparsed(body)
+        self.assertEqual(stored["path"], "/mnt/data/data.json.gz")
+        name, uploaded, content_type = client.containers.files.create.await_args.kwargs["file"]
+        self.assertEqual(name, "data.json.gz")
+        self.assertEqual(content_type, "application/gzip")
+        self.assertEqual(uploaded, payload)
+        self.assertEqual(json.loads(gzip.decompress(uploaded)), items)
+
+    async def test_splits_a_gzip_that_exceeds_the_container_limit(self):
+        items = [
+            {"deviceId": i % 3, "speed": i, "note": f'say "]" {i}'}
+            for i in range(40)
+        ]
+        raw = json.dumps(items, separators=(",", ":")).encode()
+        payload = gzip.compress(raw)
+        one_sizes = [
+            len(gzip.compress(b"[" + json.dumps(item, separators=(",", ":")).encode() + b"]"))
+            for item in items
+        ]
+        limit = max(one_sizes)
+        self.assertLess(limit, len(payload))
+        body = UnparsedBody(payload, compressed=True, uncompressed_size=len(raw))
+        client = _fake_client()
+        with (
+            patch("app.analysis.AsyncOpenAI", return_value=client),
+            patch("app.analysis.MAX_CONTAINER_FILE_BYTES", limit),
+            patch("app.analysis._PART_RAW_LIMIT", 1),
+        ):
+            stored = await store_unparsed(body)
+        self.assertEqual(stored["path"], f"/mnt/data/{MANIFEST_NAME}")
+        uploads = [call.kwargs["file"] for call in client.containers.files.create.await_args_list]
+        loaded = []
+        for name, part, content_type in uploads[:-1]:
+            self.assertTrue(name.endswith(".json.gz"))
+            self.assertEqual(content_type, "application/gzip")
+            self.assertLessEqual(len(part), limit)
+            loaded.extend(json.loads(gzip.decompress(part)))
+        self.assertEqual(loaded, items)
+
+    async def test_returns_none_when_a_non_array_cannot_fit(self):
+        payload = gzip.compress(json.dumps({"blob": "x" * 200}).encode())
+        body = UnparsedBody(payload, compressed=True, uncompressed_size=len(payload) + 50)
+        client = _fake_client()
+        with (
+            patch("app.analysis.AsyncOpenAI", return_value=client),
+            patch("app.analysis.MAX_CONTAINER_FILE_BYTES", 32),
+        ):
+            self.assertIsNone(await store_unparsed(body))
         client.containers.create.assert_not_awaited()
 
 

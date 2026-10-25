@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 from agents import RunContextWrapper
 
 from app.chat import invoke_api
+from app.traccar import UnparsedBody
 
 STORED = {"container_id": "cntr_1", "path": "/mnt/data/data.json"}
 
@@ -62,6 +63,42 @@ class TurnBudgetTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("already returned this turn", summarized[0]["reason"])
         self.assertEqual(summarized[0]["stored_data"], STORED)
         self.assertLessEqual(self.ctx.context.tool_result_bytes, 3000)
+
+    async def test_unparsed_body_is_stored_without_parsing(self):
+        body = UnparsedBody(
+            gzip_payload := b"\x1f\x8bpayload",
+            compressed=True,
+            uncompressed_size=188_000_000,
+            sample=[{"id": 1, "deviceId": 761}],
+        )
+        args = json.dumps({"method": "GET", "path": "/positions"})
+        with (
+            patch("app.chat.invoke", return_value=body),
+            patch("app.chat.store_unparsed", new=AsyncMock(return_value=STORED)) as store,
+        ):
+            result = await invoke_api.on_invoke_tool(self.ctx, args)
+        store.assert_awaited_once_with(body)
+        self.assertEqual(result["stored_data"], STORED)
+        self.assertEqual(result["sample"], [{"id": 1, "deviceId": 761}])
+        self.assertEqual(result["fields"], ["deviceId", "id"])
+        self.assertNotIn("total_items", result)
+        self.assertIn("188000000", result["reason"])
+        self.assertIn("analyze_data", result["next_step"])
+        self.assertNotIn(gzip_payload.decode("latin1"), json.dumps(result))
+        self.assertEqual(self.ctx.context.tool_result_bytes, 0)
+
+    async def test_unparsed_body_that_cannot_be_stored_says_so(self):
+        body = UnparsedBody(b"\x1f\x8b", compressed=True, uncompressed_size=188_000_000)
+        args = json.dumps({"method": "GET", "path": "/positions"})
+        with (
+            patch("app.chat.invoke", return_value=body),
+            patch("app.chat.store_unparsed", new=AsyncMock(return_value=None)),
+        ):
+            result = await invoke_api.on_invoke_tool(self.ctx, args)
+        self.assertNotIn("stored_data", result)
+        self.assertIn("too large to store", result["next_step"])
+        self.assertIn("could not be stored", result["reason"])
+        self.assertEqual(self.ctx.context.tool_result_bytes, 0)
 
 
 if __name__ == "__main__":

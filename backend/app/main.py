@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import mimetypes
@@ -23,9 +24,27 @@ from .chat import (
     create_chatkit_server,
     screenshot_tasks,
 )
-from .traccar import _get_cookie, _get_traccar_url
+from .traccar import (
+    CONNECT_TIMEOUT,
+    READ_TIMEOUT,
+    _get_cookie,
+    _get_traccar_url,
+    log_traccar_request,
+    timeout_error_message,
+    traccar_timeout,
+)
 
 logger = logging.getLogger(__name__)
+
+# Cloudflare's proxy read timeout is 125s with no bytes from the origin.
+# A comment frame is not a chat event; it only keeps that timer from firing
+# while a tool call (analyze_data) produces no SSE data.
+SSE_KEEPALIVE_INTERVAL = 20.0
+SSE_KEEPALIVE = b": ping\n\n"
+SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+}
 
 app = FastAPI(title="ChatKit API")
 
@@ -113,28 +132,55 @@ async def proxy_traccar(request: Request, path: str) -> Response:
     body = await request.body()
 
     start = time.monotonic()
-    async with httpx.AsyncClient(timeout=25) as client:
-        resp = await client.request(
+    status_code: int | str = "no response"
+    response_chain = "no response"
+    timed_out = False
+    connect_failure = False
+    resp = None
+    connect, read = traccar_timeout(path, request.url.query)
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=connect,
+                read=read,
+                write=READ_TIMEOUT,
+                pool=CONNECT_TIMEOUT,
+            )
+        ) as client:
+            resp = await client.request(
+                request.method,
+                traccar_url,
+                headers=headers,
+                content=body or None,
+            )
+        status_code = resp.status_code
+        response_chain = " -> ".join(
+            str(item.status_code) for item in [*resp.history, resp]
+        )
+    except httpx.ConnectTimeout:
+        timed_out = True
+        connect_failure = True
+    except httpx.TimeoutException:
+        timed_out = True
+    finally:
+        log_traccar_request(
             request.method,
             traccar_url,
-            headers=headers,
-            content=body or None,
+            status_code,
+            time.monotonic() - start,
+            body=body or None,
+            response_chain=response_chain,
         )
-    elapsed = time.monotonic() - start
-    if elapsed > 5:
-        level = logging.WARNING
-    elif resp.status_code >= 400:
-        level = logging.INFO
-    else:
-        level = logging.DEBUG
-    logger.log(
-        level,
-        "%s %s -> %s took %.2fs",
-        request.method,
-        traccar_url,
-        resp.status_code,
-        elapsed,
-    )
+
+    if timed_out or resp is None:
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error": timeout_error_message(
+                    request.method, path, request.url.query, connect=connect_failure
+                )
+            },
+        )
 
     excluded = {"transfer-encoding", "content-encoding", "content-length"}
     resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
@@ -214,52 +260,110 @@ async def upload_attachment(
     return Response(status_code=204)
 
 
-async def _timed_sse_stream(result: StreamingResult, label: str):
-    """Re-yield an SSE stream while logging its true end-to-end duration.
+_SSE_END = object()
 
-    The `log_requests` middleware only measures time-to-first-byte for a
-    streaming response (it returns as soon as headers are ready, well before
-    the body is fully sent). This is what actually accounts for the whole
-    request lifetime that a Vercel proxy timeout would be measured against.
+
+async def _drain_task(pending: asyncio.Task | None) -> None:
+    """Cancel the stream reader and wait until it has stopped.
+
+    The reader is one task for the whole body, so a keepalive wait cannot
+    cancel it. On disconnect it still has to be cancelled, or the agent turn
+    keeps running.
+    """
+    if pending is None:
+        return
+    if not pending.done():
+        pending.cancel()
+    try:
+        await pending
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        logger.exception("SSE reader did not stop cleanly")
+        return
+
+
+async def _read_sse(result: StreamingResult, queue: asyncio.Queue) -> None:
+    """Copy one SSE body into a queue without changing tasks between chunks.
+
+    ChatKit sets context vars for the agent request and resets them when the
+    body ends. A fresh task per chunk resets those tokens in the wrong
+    context and the stream ends with ValueError.
+    """
+    try:
+        async for chunk in result:
+            await queue.put(chunk)
+        await queue.put(_SSE_END)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        await queue.put(exc)
+
+
+async def _timed_sse_stream(result: StreamingResult, label: str):
+    """Re-yield an SSE stream, with comment frames during long silences.
+
+    The `log_requests` middleware only measures time-to-first-byte. This
+    accounts for the whole body, which is what Cloudflare's proxy read
+    timeout (125s with no bytes from the origin) is measured against.
 
     Uses try/finally rather than try/except/else: when a client disconnects
-    (which is exactly what a Vercel proxy timeout looks like from here), the
-    server cancels this generator by throwing GeneratorExit/CancelledError
-    into it -- neither is an Exception subclass, so `except Exception` does
-    not catch it and a plain post-loop log line would never run. finally
-    still runs, so the cancelled case is the one case we most need logged.
+    (which is what that Cloudflare timeout looks like from here), the server
+    cancels this generator by throwing GeneratorExit/CancelledError into it.
+    Neither is an Exception subclass, so `except Exception` does not catch it
+    and a plain post-loop log line would never run.
+
+    `asyncio.wait_for` is only applied to the queue read. Timing out that
+    read does not cancel the agent turn.
     """
     start = time.monotonic()
     chunk_count = 0
     byte_count = 0
+    keepalive_count = 0
     outcome = "cancelled"
     logger.debug("%s stream starting", label)
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+    reader = asyncio.create_task(_read_sse(result, queue))
     try:
-        async for chunk in result:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_INTERVAL)
+            except asyncio.TimeoutError:
+                keepalive_count += 1
+                yield SSE_KEEPALIVE
+                continue
+            if item is _SSE_END:
+                outcome = "done"
+                break
+            if isinstance(item, Exception):
+                outcome = "error"
+                raise item
             chunk_count += 1
-            byte_count += len(chunk)
-            yield chunk
-        outcome = "done"
+            byte_count += len(item)
+            yield item
     except Exception:
         outcome = "error"
         raise
     finally:
+        await _drain_task(reader)
         elapsed = time.monotonic() - start
         logger.info(
-            "%s stream %s: %.2fs, %d chunks, %d bytes",
+            "%s stream %s: %.2fs, %d chunks, %d bytes, %d keepalives",
             label,
             outcome,
             elapsed,
             chunk_count,
             byte_count,
+            keepalive_count,
         )
         if outcome != "done" or elapsed > 20:
             logger.warning(
-                "Slow/incomplete %s stream (%s): %.2fs, %d chunks",
+                "Slow/incomplete %s stream (%s): %.2fs, %d chunks, %d keepalives",
                 label,
                 outcome,
                 elapsed,
                 chunk_count,
+                keepalive_count,
             )
 
 
@@ -304,7 +408,9 @@ async def chatkit_endpoint(
     result = await server.process(payload, context)
     if isinstance(result, StreamingResult):
         return StreamingResponse(
-            _timed_sse_stream(result, "chatkit"), media_type="text/event-stream"
+            _timed_sse_stream(result, "chatkit"),
+            media_type="text/event-stream",
+            headers=SSE_HEADERS,
         )
     if hasattr(result, "json"):
         return Response(content=result.json, media_type="application/json")
