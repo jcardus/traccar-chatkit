@@ -34,7 +34,7 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
-from .analysis import SKIP_ANALYSIS, analyze_data, store_result, store_unparsed
+from .analysis import SKIP_ANALYSIS, analyze_data, file_can_be_analyzed, store_result, store_unparsed
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
@@ -395,12 +395,21 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             ask_support_specialist,
             forward_to_real_agent,
             analyze_data,
+            file_can_be_analyzed,
             get_map_template,
             get_openapi_yaml,
             WebSearchTool(),
         ]
+        instructions = INSTRUCTIONS
+        if SKIP_ANALYSIS:
+            instructions += (
+                "\n\nDebug: do not call analyze_data. When invoke_api stores a file, "
+                "call file_can_be_analyzed with the container id, path, file byte size, "
+                "uncompressed size, and a description of what the file contains (fields "
+                "and sample). Tell the user that answer. Do not estimate counts."
+            )
         self.assistant = Agent[TraccarAgentContext](
-            model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=cast(Any, tools)
+            model=MODEL, name="Traccar Assistant", instructions=instructions, tools=cast(Any, tools)
         )
         self._thread_item_converter = self._init_thread_item_converter()
 
@@ -633,18 +642,19 @@ def _large_result_next_step(stored: bool) -> str:
     if stored and SKIP_ANALYSIS:
         return (
             "Do not call analyze_data. Do not retry this call or split it into one "
-            "request per device. The file is uploaded. stored_data.files is the "
-            "container's own listing. Tell the user the container id and each file's "
-            "id, path, and byte size. Do not compute an answer from the sample."
+            "request per device. Call file_can_be_analyzed with stored_data's "
+            "container_id and path, the file byte size from stored_data.files, the "
+            "uncompressed size, and a short description of what the file contains "
+            "(fields and sample). Tell the user that answer. Do not compute from the sample."
         )
     if stored:
         return (
             "Do not retry this call or split it into one request per device. "
-            "The full result is stored. To compute exact answers (totals, maximums, "
-            "counts, averages, filtering), call analyze_data with stored_data's "
-            "container_id and path. If the user wants to see or browse the data, "
-            "fetch it client-side with JavaScript fetch() on the same path under "
-            "/api/ and render it with show_html."
+            "The full result is stored. stored_data.files is the container's listing. "
+            "You decide the next step. You may call file_can_be_analyzed, analyze_data, "
+            "or both. You choose the question and the method. If the user wants to see "
+            "or browse the data, fetch it client-side with JavaScript fetch() on the "
+            "same path under /api/ and render it with show_html."
         )
     return (
         "Do not retry this call or split it into one request per device. "

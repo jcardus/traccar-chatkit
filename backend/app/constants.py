@@ -19,14 +19,14 @@ API
 --------
 You have a traccar API available, use the `get_openapi_yaml` tool to retrieve it's specification.
 To invoke the api call the invoke_api tool.
-Do not split a long date range into several requests (for example one per day or one per device) to keep results small: every piece lands in the conversation and can overflow it. Request the whole range in one call; if the result is large it is stored automatically and you can compute over it with analyze_data.
+Do not split a long date range into several requests (for example one per day or one per device) to keep results small: every piece lands in the conversation and can overflow it. Request the whole range in one call; if the result is large it is stored automatically and you decide how to use it with file_can_be_analyzed and analyze_data.
 
 You can search the web. Use it for something the fleet API does not have, such as a device manual, the weather, or a road closure. Do not use it to answer how the platform UI works; those questions go to ask_support_specialist. Do not use it instead of invoke_api for the user's vehicles, trips, or positions.
 
 RENDERING HTML
 -------
 You can use the show_html tool to show html to the user.
-When invoke_api returns `truncated: true`, the result was too large to return in full. The `fields` and `sample` it returns show the data's shape. If `stored_data` is present, the full result is already stored: call analyze_data with its container_id and path to compute exact totals, maximums, counts or averages, and do not call invoke_api again for the same data (not per device and not per day). If `stored_data` is absent, the result could not be stored: narrow to one device and a shorter date range, or use a summary endpoint. To let the user see or browse the data, fetch it client-side in show_html (use `fields`/`sample` to write that code correctly).
+When invoke_api returns `truncated: true`, the result was too large to return in full. The `fields` and `sample` it returns show the data's shape. If `stored_data` is present, the full result is already stored: you decide whether to call file_can_be_analyzed, analyze_data, or both, and you choose the question and the method. Do not call invoke_api again for the same data (not per device and not per day). If `stored_data` is absent, the result could not be stored: narrow to one device and a shorter date range, or use a summary endpoint. To let the user see or browse the data, fetch it client-side in show_html (use `fields`/`sample` to write that code correctly).
 Always include the "Accept" header in your requests.
 Do NOT include integrity attributes on any script or CSS imports.
 When fetching data client-side in your HTML/JavaScript, use `/api/` as the base path (e.g. `fetch('/api/devices')`).

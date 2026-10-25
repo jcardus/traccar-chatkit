@@ -16,8 +16,10 @@ from agents import CodeInterpreterTool, RunContextWrapper
 from app.analysis import (
     ANALYST_INSTRUCTIONS,
     CONTAINER_IDLE_MINUTES,
+    FILE_CHECK_INSTRUCTIONS,
     MANIFEST_NAME,
     analyze_data,
+    file_can_be_analyzed,
     store_result,
     store_unparsed,
 )
@@ -234,10 +236,10 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         analyst, prompt = run.await_args.args
         self.assertIn("/mnt/data/data.json", prompt)
         self.assertIn("max speed?", prompt)
-        self.assertIn(".json.gz", prompt)
-        self.assertIn("fleet-parts-manifest.json", prompt)
+        self.assertIn("Decide how to read", prompt)
         self.assertIn(".json.gz", ANALYST_INSTRUCTIONS)
         self.assertIn("fleet-parts-manifest.json", ANALYST_INSTRUCTIONS)
+        self.assertIn("You decide how to read", ANALYST_INSTRUCTIONS)
         (tool,) = analyst.tools
         self.assertIsInstance(tool, CodeInterpreterTool)
         self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
@@ -257,13 +259,40 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("cntr_1", answer)
 
 
+class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
+    async def test_asks_from_the_description_without_opening_the_file(self):
+        ctx = RunContextWrapper(context=SimpleNamespace())
+        args = json.dumps(
+            {
+                "container_id": "cntr_1",
+                "path": "/mnt/data/data.json.gz",
+                "file_bytes": 16665642,
+                "uncompressed_bytes": 222290669,
+                "contents": "JSON array of positions. Fields: deviceId, latitude. Sample: [{\"deviceId\": 761}]",
+            }
+        )
+        run = AsyncMock(return_value=SimpleNamespace(final_output="not analyzable\nThe JSON is too large to load."))
+        with patch("app.analysis.Runner.run", new=run):
+            answer = await file_can_be_analyzed.on_invoke_tool(ctx, args)
+        self.assertIn("not analyzable", answer)
+        checker, prompt = run.await_args.args
+        self.assertEqual(checker.tools, [])
+        self.assertIn("whether it is analyzable", FILE_CHECK_INSTRUCTIONS)
+        self.assertIn("/mnt/data/data.json.gz", prompt)
+        self.assertIn("222290669", prompt)
+        self.assertIn("deviceId", prompt)
+        self.assertIn("Can this file be analyzed?", prompt)
+        self.assertNotIn("json.load", prompt)
+
+
 class SummaryWithStoredDataTests(unittest.TestCase):
     def test_includes_handle_and_analyze_hint_when_stored(self):
         stored = {"container_id": "cntr_1", "path": "/mnt/data/data.json"}
         summary = _summarize_large_result([{"a": 1}], 10, stored)
         self.assertEqual(summary["stored_data"], stored)
-        self.assertIn("Do not call analyze_data", summary["next_step"])
-        self.assertIn("stored_data.files", summary["next_step"])
+        self.assertIn("You decide the next step", summary["next_step"])
+        self.assertIn("file_can_be_analyzed", summary["next_step"])
+        self.assertIn("analyze_data", summary["next_step"])
         self.assertIn("one request per device", summary["next_step"])
 
     def test_no_handle_or_hint_when_upload_failed(self):
