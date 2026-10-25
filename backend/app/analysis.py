@@ -34,6 +34,15 @@ MANIFEST_NAME = "fleet-parts-manifest.json"
 # Raw JSON per split part. Gzip of this is under the container cap even when
 # the text does not compress.
 _PART_RAW_LIMIT = 32 * 1024 * 1024
+# JSON objects need several times the text size. Five times the text is the
+# smallest whole factor that places a 260 MB file above the 1 GB tier.
+_JSON_RAM_FACTOR = 5
+_MEMORY_TIERS = (
+    (1 << 30, "1g"),
+    (4 << 30, "4g"),
+    (16 << 30, "16g"),
+    (64 << 30, "64g"),
+)
 _WS = frozenset((0x20, 0x09, 0x0A, 0x0D))
 _VALUE_END = _WS | {ord(","), ord("]")}
 
@@ -281,12 +290,25 @@ class _ArraySplitter:
             self.failed = True
 
 
-async def _upload_parts(parts: list[tuple[str, bytes, str]]) -> dict[str, str] | None:
+def _memory_limit(uncompressed_bytes: int) -> str:
+    """Smallest code-interpreter tier that can hold the parsed JSON."""
+    needed = uncompressed_bytes * _JSON_RAM_FACTOR
+    for capacity, name in _MEMORY_TIERS:
+        if needed <= capacity:
+            return name
+    return _MEMORY_TIERS[-1][1]
+
+
+async def _upload_parts(
+    parts: list[tuple[str, bytes, str]], uncompressed_bytes: int
+) -> dict[str, str] | None:
+    memory_limit = _memory_limit(uncompressed_bytes)
     try:
         client = AsyncOpenAI()
         container = await client.containers.create(
             name="fleet-data",
             expires_after={"anchor": "last_active_at", "minutes": CONTAINER_IDLE_MINUTES},
+            extra_body={"memory_limit": memory_limit},
         )
         uploaded_paths: list[str] = []
         uploaded_bytes = 0
@@ -311,11 +333,12 @@ async def _upload_parts(parts: list[tuple[str, bytes, str]]) -> dict[str, str] |
         logger.exception("Failed to store large result for analysis")
         return None
     logger.info(
-        "Stored large result in %s at %s (%d bytes uploaded, %d file(s)); container lists %s",
+        "Stored large result in %s at %s (%d bytes uploaded, %d file(s), memory_limit=%s); container lists %s",
         container.id,
         path,
         uploaded_bytes,
         len(uploaded_paths) if len(uploaded_paths) == 1 else len(uploaded_paths) + 1,
+        memory_limit,
         files,
     )
     return {"container_id": container.id, "path": path, "files": files}
@@ -346,7 +369,7 @@ async def store_result(result: Any) -> dict[str, str] | None:
     parts = _pack(result)
     if not parts:
         return None
-    return await _upload_parts(parts)
+    return await _upload_parts(parts, len(_dumps(result)))
 
 
 async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
@@ -358,64 +381,7 @@ async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
     parts = _pack_unparsed(body)
     if not parts:
         return None
-    return await _upload_parts(parts)
-
-
-FILE_CHECK_INSTRUCTIONS = """
-A JSON file from the platform API is in the code interpreter at the path you are given.
-A path ending in .json.gz is gzip-compressed JSON. A path ending in fleet-parts-manifest.json lists part paths. Any other path is JSON.
-
-Open the file. Say whether that read worked and how you would read the file for a later question.
-Do not compute the user's answer.
-"""
-
-
-@function_tool(
-    description_override=(
-        "Open a stored file in its container and report whether that read worked. "
-        "Pass the container_id, path, file byte size, uncompressed size, and a description "
-        "of what the file contains. Does not compute the user's answer. If this read fails, "
-        "do not call analyze_data on the same container."
-    )
-)
-async def file_can_be_analyzed(
-    container_id: str,
-    path: str,
-    file_bytes: int,
-    uncompressed_bytes: int,
-    contents: str,
-) -> str:
-    logger.info(
-        "TOOL: file_can_be_analyzed container=%s path=%s file_bytes=%s uncompressed=%s",
-        container_id,
-        path,
-        file_bytes,
-        uncompressed_bytes,
-    )
-    checker = Agent(
-        name="File check",
-        model=MODEL,
-        instructions=FILE_CHECK_INSTRUCTIONS,
-        tools=[
-            CodeInterpreterTool(tool_config={"type": "code_interpreter", "container": container_id})
-        ],
-    )
-    prompt = (
-        f"The data file is at {path}.\n"
-        f"file bytes: {file_bytes}\n"
-        f"uncompressed bytes: {uncompressed_bytes}\n"
-        f"what the file contains:\n{contents}\n\n"
-        "Open the file. Say whether that read worked and how you would read it. "
-        "Do not compute an answer."
-    )
-    start = time.monotonic()
-    try:
-        run = await Runner.run(checker, prompt)
-    except Exception:
-        logger.exception("file_can_be_analyzed failed after %.2fs", time.monotonic() - start)
-        return "The file read failed. Do not call analyze_data on this container."
-    logger.info("file_can_be_analyzed took %.2fs", time.monotonic() - start)
-    return str(run.final_output)
+    return await _upload_parts(parts, body.uncompressed_size)
 
 
 @function_tool(
