@@ -251,7 +251,7 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
-    async def test_asks_from_the_description_without_opening_the_file(self):
+    async def _call(self, run):
         ctx = RunContextWrapper(context=SimpleNamespace())
         args = json.dumps(
             {
@@ -262,18 +262,30 @@ class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
                 "contents": "JSON array of positions. Fields: deviceId, latitude. Sample: [{\"deviceId\": 761}]",
             }
         )
-        run = AsyncMock(return_value=SimpleNamespace(final_output="not analyzable\nThe JSON is too large to load."))
         with patch("app.analysis.Runner.run", new=run):
-            answer = await file_can_be_analyzed.on_invoke_tool(ctx, args)
-        self.assertIn("not analyzable", answer)
+            return await file_can_be_analyzed.on_invoke_tool(ctx, args)
+
+    async def test_opens_the_file_in_the_container(self):
+        run = AsyncMock(return_value=SimpleNamespace(final_output="The read worked."))
+        answer = await self._call(run)
+        self.assertEqual(answer, "The read worked.")
         checker, prompt = run.await_args.args
-        self.assertEqual(checker.tools, [])
-        self.assertIn("whether it is analyzable", FILE_CHECK_INSTRUCTIONS)
+        self.assertIn("Open the file", FILE_CHECK_INSTRUCTIONS)
+        self.assertIn("Do not compute the user's answer", FILE_CHECK_INSTRUCTIONS)
         self.assertIn("/mnt/data/data.json.gz", prompt)
         self.assertIn("222290669", prompt)
         self.assertIn("deviceId", prompt)
-        self.assertIn("Can this file be analyzed?", prompt)
+        self.assertIn("Open the file", prompt)
         self.assertNotIn("json.load", prompt)
+        (tool,) = checker.tools
+        self.assertIsInstance(tool, CodeInterpreterTool)
+        self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
+
+    async def test_failure_says_not_to_analyze_that_container(self):
+        answer = await self._call(AsyncMock(side_effect=RuntimeError("sandbox")))
+        self.assertIn("file read failed", answer)
+        self.assertIn("Do not call analyze_data", answer)
+        self.assertNotIn("expired", answer)
 
 
 class SummaryWithStoredDataTests(unittest.TestCase):

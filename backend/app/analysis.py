@@ -362,17 +362,20 @@ async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
 
 
 FILE_CHECK_INSTRUCTIONS = """
-You decide whether a stored data file can be analyzed, and how.
-You do not have the file. You only have the description you are given.
-Say whether it is analyzable and what approach you would use. Do not compute the user's answer from the sample.
+A JSON file from the platform API is in the code interpreter at the path you are given.
+A path ending in .json.gz is gzip-compressed JSON. A path ending in fleet-parts-manifest.json lists part paths. Any other path is JSON.
+
+Open the file. Say whether that read worked and how you would read the file for a later question.
+Do not compute the user's answer.
 """
 
 
 @function_tool(
     description_override=(
-        "Ask whether a stored file can be analyzed. Pass the container_id, path, "
-        "file byte size, uncompressed size, and a description of what the file contains "
-        "(fields and a few sample records). Does not load the file or compute an answer."
+        "Open a stored file in its container and report whether that read worked. "
+        "Pass the container_id, path, file byte size, uncompressed size, and a description "
+        "of what the file contains. Does not compute the user's answer. If this read fails, "
+        "do not call analyze_data on the same container."
     )
 )
 async def file_can_be_analyzed(
@@ -393,22 +396,24 @@ async def file_can_be_analyzed(
         name="File check",
         model=MODEL,
         instructions=FILE_CHECK_INSTRUCTIONS,
-        tools=[],
+        tools=[
+            CodeInterpreterTool(tool_config={"type": "code_interpreter", "container": container_id})
+        ],
     )
     prompt = (
-        f"container_id: {container_id}\n"
-        f"path: {path}\n"
+        f"The data file is at {path}.\n"
         f"file bytes: {file_bytes}\n"
         f"uncompressed bytes: {uncompressed_bytes}\n"
         f"what the file contains:\n{contents}\n\n"
-        "Can this file be analyzed?"
+        "Open the file. Say whether that read worked and how you would read it. "
+        "Do not compute an answer."
     )
     start = time.monotonic()
     try:
         run = await Runner.run(checker, prompt)
     except Exception:
         logger.exception("file_can_be_analyzed failed after %.2fs", time.monotonic() - start)
-        return "The file check failed. Report the stored file listing and do not estimate an answer."
+        return "The file read failed. Do not call analyze_data on this container."
     logger.info("file_can_be_analyzed took %.2fs", time.monotonic() - start)
     return str(run.final_output)
 

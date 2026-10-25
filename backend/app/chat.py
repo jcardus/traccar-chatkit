@@ -634,8 +634,9 @@ def _large_result_next_step(stored: bool) -> str:
         return (
             "Do not retry this same call. "
             "The full result is stored. stored_data.files is the container's listing. "
-            "You decide the next step. You may call file_can_be_analyzed, analyze_data, "
-            "or both. You choose the question and the method."
+            "You decide the next step. file_can_be_analyzed opens the file in this container "
+            "and reports whether that read worked. If that read fails, do not call "
+            "analyze_data. If it works, you may call analyze_data and you choose the question."
         )
     return "Do not retry this same call. The result was too large to store."
 
