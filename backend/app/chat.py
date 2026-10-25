@@ -18,7 +18,13 @@ from uuid import uuid4
 from agents import Agent, RunContextWrapper, Runner, WebSearchTool, function_tool
 from chatkit.agents import ClientToolCall, ThreadItemConverter, stream_agent_response
 from chatkit.server import ChatKitServer, ThreadItemDoneEvent
-from chatkit.types import ClientToolCallItem, HiddenContextItem, ThreadMetadata, UserMessageItem
+from chatkit.types import (
+    ClientToolCallItem,
+    HiddenContextItem,
+    ImageAttachment,
+    ThreadMetadata,
+    UserMessageItem,
+)
 from openai.types.responses import (
     EasyInputMessageParam,
     ResponseInputContentParam,
@@ -271,6 +277,35 @@ def _screenshot_url_from_output(output: Any) -> str | None:
         if isinstance(url, str) and url:
             return url
     return None
+
+
+def show_html_client_arguments(
+    html: str, html_url: str, screenshot_url: str
+) -> dict[str, str]:
+    """Args the browser needs to show the HTML and hand the PNG back.
+
+    The current panel reads screenshot_url, fetches it, and returns it from
+    the tool call. plataforma.checaruta.com still runs the older bundle: it
+    JSON-parses attachment, fetches preview_url, and sends the image with
+    sendUserMessage. The id is the screenshot filename stem so that message
+    resolves to the PNG Playwright writes.
+    """
+    filename = screenshot_url.rsplit("/", 1)[-1].split("?", 1)[0]
+    attachment_id = filename[:-4] if filename.endswith(".png") else filename
+    return {
+        "html": html,
+        "html_url": html_url,
+        "screenshot_url": screenshot_url,
+        "attachment": json.dumps(
+            {
+                "id": attachment_id,
+                "type": "image",
+                "name": "screenshot.png",
+                "mime_type": "image/png",
+                "preview_url": screenshot_url,
+            }
+        ),
+    }
 
 
 def _completed_show_html_screenshot_url(item: Any) -> str | None:
@@ -579,17 +614,23 @@ def _summarize_large_result(
             key: f"list of {len(value)}" if isinstance(value, list) else type(value).__name__
             for key, value in result.items()
         }
-    next_step = (
-        "Do not retry this exact call. If you are answering a question, narrow the query "
-        "(date range, a single device, a limit) or use a summary/aggregate endpoint. If the "
-        "user wants to see or browse the data, fetch it client-side with JavaScript fetch() "
-        "on the same path under /api/ and render it with show_html."
-    )
     if stored:
         summary["stored_data"] = stored
-        next_step += (
-            " To compute exact answers over the full data (totals, maximums, counts, "
-            "averages), call analyze_data with stored_data's container_id and path."
+        next_step = (
+            "Do not retry this call or split it into one request per device. "
+            "The full result is stored. To compute exact answers (totals, maximums, "
+            "counts, averages, filtering), call analyze_data with stored_data's "
+            "container_id and path. If the user wants to see or browse the data, "
+            "fetch it client-side with JavaScript fetch() on the same path under "
+            "/api/ and render it with show_html."
+        )
+    else:
+        next_step = (
+            "Do not retry this call or split it into one request per device. "
+            "The result was too large to store. Narrow to one device and a shorter "
+            "date range, or use a summary/aggregate endpoint. If the user wants to "
+            "see or browse the data, fetch it client-side with JavaScript fetch() "
+            "on the same path under /api/ and render it with show_html."
         )
     summary["next_step"] = next_step
     return summary
@@ -768,18 +809,23 @@ async def show_html(ctx: RunContextWrapper[TraccarAgentContext], html: str) -> d
 
         screenshot_tasks[screenshot_filename] = asyncio.create_task(_take_screenshot())
 
-        # The frontend renders the HTML, warms `screenshot_url` (which blocks on
-        # the background screenshot task server-side), then answers this client
-        # tool call with {"screenshot_url": ...}. ChatKit re-enters respond() and
-        # TraccarThreadItemConverter.client_tool_call_to_input feeds the image
-        # back to the model.
+        # Both client shapes are sent. The current panel returns screenshot_url
+        # from the tool call. The Checaruta bundle fetches attachment.preview_url
+        # (that GET waits on the task above) and sends the image as a user message.
+        arguments = show_html_client_arguments(html, html_url, screenshot_url)
+        payload = json.loads(arguments["attachment"])
+        await ctx.context.store.save_attachment(
+            ImageAttachment(
+                id=payload["id"],
+                name=payload["name"],
+                mime_type=payload["mime_type"],
+                preview_url=payload["preview_url"],
+            ),
+            ctx.context.request_context,
+        )
         ctx.context.client_tool_call = ClientToolCall(
             name="show_html",
-            arguments={
-                "html": html,
-                "html_url": html_url,
-                "screenshot_url": screenshot_url,
-            },
+            arguments=arguments,
         )
         logger.debug("show_html success")
         return {"result": "success", "url": html_url}

@@ -4,23 +4,33 @@ Mocked: no OpenAI calls. Stdlib unittest; run from backend/ with project deps in
 `uv run python -m unittest discover -s tests`
 """
 
+import gzip
 import json
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agents import CodeInterpreterTool, RunContextWrapper
 
-from app.analysis import CONTAINER_IDLE_MINUTES, analyze_data, store_result
+from app.analysis import (
+    ANALYST_INSTRUCTIONS,
+    CONTAINER_IDLE_MINUTES,
+    MANIFEST_NAME,
+    analyze_data,
+    store_result,
+)
 from app.chat import _summarize_large_result
 
 
 def _fake_client():
     client = MagicMock()
     client.containers.create = AsyncMock(return_value=SimpleNamespace(id="cntr_1"))
-    client.containers.files.create = AsyncMock(
-        return_value=SimpleNamespace(path="/mnt/data/data.json")
-    )
+
+    async def create_file(_container_id, file):
+        return SimpleNamespace(path=f"/mnt/data/{file[0]}")
+
+    client.containers.files.create = AsyncMock(side_effect=create_file)
     return client
 
 
@@ -47,6 +57,82 @@ class StoreResultTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.analysis.AsyncOpenAI", return_value=client):
             self.assertIsNone(await store_result([1]))
 
+    async def test_gzips_when_raw_json_exceeds_container_limit(self):
+        items = [
+            {
+                "deviceId": 1,
+                "fixTime": "2026-10-01T00:00:00Z",
+                "speed": 0,
+                "latitude": 38.7,
+                "longitude": -9.1,
+            }
+        ] * 80
+        raw = json.dumps(items, separators=(",", ":"), ensure_ascii=False).encode()
+        client = _fake_client()
+        with (
+            patch("app.analysis.AsyncOpenAI", return_value=client),
+            patch("app.analysis.MAX_CONTAINER_FILE_BYTES", len(raw) - 1),
+        ):
+            stored = await store_result(items)
+        self.assertEqual(stored["path"], "/mnt/data/data.json.gz")
+        name, payload, content_type = client.containers.files.create.await_args.kwargs["file"]
+        self.assertEqual(name, "data.json.gz")
+        self.assertEqual(content_type, "application/gzip")
+        self.assertLessEqual(len(payload), len(raw) - 1)
+        self.assertEqual(json.loads(gzip.decompress(payload)), items)
+
+    async def test_splits_when_gzip_exceeds_container_limit(self):
+        items = [
+            {
+                "deviceId": i % 3,
+                "fixTime": f"2026-10-01T00:{i % 60:02d}:00Z",
+                "speed": i,
+                "note": "p" * 180,
+            }
+            for i in range(40)
+        ]
+        raw = json.dumps(items, separators=(",", ":"), ensure_ascii=False).encode()
+        compressed = gzip.compress(raw)
+        one = gzip.compress(
+            json.dumps([items[0]], separators=(",", ":"), ensure_ascii=False).encode()
+        )
+        limit = max(len(one) + 32, len(compressed) // 3)
+        self.assertLess(limit, len(compressed))
+        client = _fake_client()
+        with (
+            patch("app.analysis.AsyncOpenAI", return_value=client),
+            patch("app.analysis.MAX_CONTAINER_FILE_BYTES", limit),
+        ):
+            stored = await store_result(items)
+        self.assertEqual(stored["path"], f"/mnt/data/{MANIFEST_NAME}")
+        uploads = [call.kwargs["file"] for call in client.containers.files.create.await_args_list]
+        part_uploads = uploads[:-1]
+        manifest_name, manifest_body, manifest_type = uploads[-1]
+        self.assertEqual(manifest_name, MANIFEST_NAME)
+        self.assertEqual(manifest_type, "application/json")
+        self.assertGreaterEqual(len(part_uploads), 2)
+        loaded = []
+        for name, payload, content_type in part_uploads:
+            self.assertTrue(name.endswith(".json.gz"))
+            self.assertEqual(content_type, "application/gzip")
+            self.assertLessEqual(len(payload), limit)
+            loaded.extend(json.loads(gzip.decompress(payload)))
+        self.assertEqual(loaded, items)
+        manifest = json.loads(manifest_body)
+        self.assertEqual(
+            manifest["parts"], [f"/mnt/data/{name}" for name, _, _ in part_uploads]
+        )
+
+    async def test_returns_none_without_creating_a_container_when_it_cannot_fit(self):
+        client = _fake_client()
+        blob = {"blob": os.urandom(800).hex()}
+        with (
+            patch("app.analysis.AsyncOpenAI", return_value=client),
+            patch("app.analysis.MAX_CONTAINER_FILE_BYTES", 32),
+        ):
+            self.assertIsNone(await store_result(blob))
+        client.containers.create.assert_not_awaited()
+
 
 class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
     async def _call(self, run):
@@ -64,6 +150,10 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         analyst, prompt = run.await_args.args
         self.assertIn("/mnt/data/data.json", prompt)
         self.assertIn("max speed?", prompt)
+        self.assertIn(".json.gz", prompt)
+        self.assertIn("fleet-parts-manifest.json", prompt)
+        self.assertIn(".json.gz", ANALYST_INSTRUCTIONS)
+        self.assertIn("fleet-parts-manifest.json", ANALYST_INSTRUCTIONS)
         (tool,) = analyst.tools
         self.assertIsInstance(tool, CodeInterpreterTool)
         self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
@@ -80,6 +170,7 @@ class SummaryWithStoredDataTests(unittest.TestCase):
         summary = _summarize_large_result([{"a": 1}], 10, stored)
         self.assertEqual(summary["stored_data"], stored)
         self.assertIn("analyze_data", summary["next_step"])
+        self.assertIn("one request per device", summary["next_step"])
 
     def test_no_handle_or_hint_when_upload_failed(self):
         summary = _summarize_large_result([{"a": 1}], 10, None)

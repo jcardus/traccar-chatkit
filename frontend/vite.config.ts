@@ -32,7 +32,7 @@ export default defineConfig({
         createHtmlPlugin({
             inject: {
                 data: {
-                    appVersion: packageJson.version,
+                    appVersion: `${packageJson.version} · ${buildInfo.sha}`,
                 },
             },
         }),
