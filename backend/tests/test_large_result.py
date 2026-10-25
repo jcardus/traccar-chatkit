@@ -20,7 +20,7 @@ class SummarizeLargeResultTests(unittest.TestCase):
         self.assertEqual(summary["sample"], result[:SAMPLE_MAX_ITEMS])
         self.assertIn("999999", summary["reason"])
         self.assertIn("shorter", summary["next_step"])
-        self.assertIn("client-side", summary["next_step"])
+        self.assertNotIn("client-side", summary["next_step"])
         self.assertIn("Do not retry", summary["next_step"])
         self.assertIn("one request per device", summary["next_step"])
         self.assertIn("too large to store", summary["next_step"])

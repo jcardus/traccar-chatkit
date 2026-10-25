@@ -441,8 +441,7 @@ async def analyze_data(container_id: str, path: str, question: str) -> str:
     except Exception:
         logger.exception("analyze_data failed after %.2fs", time.monotonic() - start)
         return (
-            "The analysis failed (the stored data may have expired). "
-            "Narrow the query or fetch the data client-side in show_html instead."
+            "The analysis failed (the stored data may have expired). Narrow the query."
         )
     logger.info("analyze_data took %.2fs", time.monotonic() - start)
     return str(run.final_output)

@@ -604,8 +604,7 @@ def _summarize_large_result(
 ) -> dict[str, Any]:
     """Describe an oversized API result without returning the data itself.
 
-    The model gets the shape (count, field names, a few sample records) so it can
-    write correct client-side fetch code in show_html instead of retrying.
+    The model gets the shape (count, field names, a few sample records).
     """
     summary: dict[str, Any] = {
         "truncated": True,
@@ -636,16 +635,12 @@ def _large_result_next_step(stored: bool) -> str:
             "Do not retry this call or split it into one request per device. "
             "The full result is stored. stored_data.files is the container's listing. "
             "You decide the next step. You may call file_can_be_analyzed, analyze_data, "
-            "or both. You choose the question and the method. If the user wants to see "
-            "or browse the data, fetch it client-side with JavaScript fetch() on the "
-            "same path under /api/ and render it with show_html."
+            "or both. You choose the question and the method."
         )
     return (
         "Do not retry this call or split it into one request per device. "
         "The result was too large to store. Narrow to one device and a shorter "
-        "date range, or use a summary/aggregate endpoint. If the user wants to "
-        "see or browse the data, fetch it client-side with JavaScript fetch() "
-        "on the same path under /api/ and render it with show_html."
+        "date range, or use a summary/aggregate endpoint."
     )
 
 

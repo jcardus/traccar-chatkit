@@ -246,7 +246,8 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
     async def test_failure_returns_a_recoverable_message(self):
         answer = await self._call(AsyncMock(side_effect=RuntimeError("expired")))
         self.assertIn("analysis failed", answer)
-        self.assertIn("show_html", answer)
+        self.assertIn("Narrow the query", answer)
+        self.assertNotIn("client-side", answer)
 
 
 class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
