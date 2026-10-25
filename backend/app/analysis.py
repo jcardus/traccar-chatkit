@@ -26,9 +26,6 @@ from .traccar import UnparsedBody
 
 logger = logging.getLogger(__name__)
 
-# While set, analyze_data does not run and the assistant is told to stop after
-# the file check. Leave this off so the model can choose the next step.
-SKIP_ANALYSIS = False
 CONTAINER_IDLE_MINUTES = 20
 # OpenAI rejects container files at 50 MiB. Stay a little under that.
 MAX_CONTAINER_FILE_BYTES = 50 * 1024 * 1024 - 65_536
@@ -46,7 +43,7 @@ You are a data analyst for a GPS fleet tracking platform.
 A JSON file from the platform API is in the code interpreter at the path you are given.
 A path ending in .json.gz is gzip-compressed JSON. A path ending in fleet-parts-manifest.json lists part paths. Any other path is JSON.
 
-The sandbox has about 1 GB of memory. Parsing JSON uses several times the text size. You decide how to read the file and how to compute the answer. Never estimate; compute.
+You decide how to read the file and how to compute the answer. Never estimate; compute.
 Answer concisely with the computed numbers.
 
 Speeds in the data are in knots. Report speeds in km/h (multiply by 1.852).
@@ -367,7 +364,6 @@ async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
 FILE_CHECK_INSTRUCTIONS = """
 You decide whether a stored data file can be analyzed, and how.
 You do not have the file. You only have the description you are given.
-The code interpreter sandbox has about 1 GB of memory. Parsing JSON uses several times its text size.
 Say whether it is analyzable and what approach you would use. Do not compute the user's answer from the sample.
 """
 
@@ -426,12 +422,6 @@ async def file_can_be_analyzed(
 )
 async def analyze_data(container_id: str, path: str, question: str) -> str:
     logger.info("TOOL: analyze_data container=%s path=%s", container_id, path)
-    if SKIP_ANALYSIS:
-        return (
-            "Analysis is turned off. Call file_can_be_analyzed with this container_id "
-            f"({container_id}), path ({path}), the file byte size, the uncompressed size, "
-            "and a description of what the file contains. Do not estimate a count."
-        )
     start = time.monotonic()
     analyst = Agent(
         name="Data analyst",

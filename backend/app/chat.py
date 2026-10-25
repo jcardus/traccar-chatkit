@@ -34,7 +34,7 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
-from .analysis import SKIP_ANALYSIS, analyze_data, file_can_be_analyzed, store_result, store_unparsed
+from .analysis import analyze_data, file_can_be_analyzed, store_result, store_unparsed
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
@@ -400,16 +400,8 @@ class TraccarAssistantServer(ChatKitServer[dict[str, Any]]):
             get_openapi_yaml,
             WebSearchTool(),
         ]
-        instructions = INSTRUCTIONS
-        if SKIP_ANALYSIS:
-            instructions += (
-                "\n\nDebug: do not call analyze_data. When invoke_api stores a file, "
-                "call file_can_be_analyzed with the container id, path, file byte size, "
-                "uncompressed size, and a description of what the file contains (fields "
-                "and sample). Tell the user that answer. Do not estimate counts."
-            )
         self.assistant = Agent[TraccarAgentContext](
-            model=MODEL, name="Traccar Assistant", instructions=instructions, tools=cast(Any, tools)
+            model=MODEL, name="Traccar Assistant", instructions=INSTRUCTIONS, tools=cast(Any, tools)
         )
         self._thread_item_converter = self._init_thread_item_converter()
 
@@ -639,14 +631,6 @@ def _summarize_large_result(
 
 
 def _large_result_next_step(stored: bool) -> str:
-    if stored and SKIP_ANALYSIS:
-        return (
-            "Do not call analyze_data. Do not retry this call or split it into one "
-            "request per device. Call file_can_be_analyzed with stored_data's "
-            "container_id and path, the file byte size from stored_data.files, the "
-            "uncompressed size, and a short description of what the file contains "
-            "(fields and sample). Tell the user that answer. Do not compute from the sample."
-        )
     if stored:
         return (
             "Do not retry this call or split it into one request per device. "

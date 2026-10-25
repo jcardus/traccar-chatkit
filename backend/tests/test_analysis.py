@@ -230,8 +230,7 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_runs_analyst_with_code_interpreter_on_the_container(self):
         run = AsyncMock(return_value=SimpleNamespace(final_output="Max speed was 88 km/h."))
-        with patch("app.analysis.SKIP_ANALYSIS", False):
-            answer = await self._call(run)
+        answer = await self._call(run)
         self.assertEqual(answer, "Max speed was 88 km/h.")
         analyst, prompt = run.await_args.args
         self.assertIn("/mnt/data/data.json", prompt)
@@ -245,18 +244,9 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
 
     async def test_failure_returns_a_recoverable_message(self):
-        with patch("app.analysis.SKIP_ANALYSIS", False):
-            answer = await self._call(AsyncMock(side_effect=RuntimeError("expired")))
+        answer = await self._call(AsyncMock(side_effect=RuntimeError("expired")))
         self.assertIn("analysis failed", answer)
         self.assertIn("show_html", answer)
-
-    async def test_skip_analysis_does_not_call_the_analyst(self):
-        run = AsyncMock()
-        with patch("app.analysis.SKIP_ANALYSIS", True):
-            answer = await self._call(run)
-        run.assert_not_awaited()
-        self.assertIn("Analysis is turned off", answer)
-        self.assertIn("cntr_1", answer)
 
 
 class FileCanBeAnalyzedTests(unittest.IsolatedAsyncioTestCase):
