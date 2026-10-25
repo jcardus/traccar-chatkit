@@ -632,16 +632,12 @@ def _summarize_large_result(
 def _large_result_next_step(stored: bool) -> str:
     if stored:
         return (
-            "Do not retry this call or split it into one request per device. "
+            "Do not retry this same call. "
             "The full result is stored. stored_data.files is the container's listing. "
             "You decide the next step. You may call file_can_be_analyzed, analyze_data, "
             "or both. You choose the question and the method."
         )
-    return (
-        "Do not retry this call or split it into one request per device. "
-        "The result was too large to store. Narrow to one device and a shorter "
-        "date range, or use a summary/aggregate endpoint."
-    )
+    return "Do not retry this same call. The result was too large to store."
 
 
 def _summarize_handed_off(body: UnparsedBody, stored: dict[str, str] | None) -> dict[str, Any]:

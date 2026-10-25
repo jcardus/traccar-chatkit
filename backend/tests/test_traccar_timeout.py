@@ -114,8 +114,7 @@ class InvokeApiTimeoutTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("GET /reports/route", message)
         self.assertIn("within 300s", message)
         self.assertIn("Do not retry this same request", message)
-        self.assertIn("shorter date range", message)
-        self.assertIn("summary or trips report", message)
+        self.assertNotIn("one device", message)
         self.assertNotIn("Please try again", message)
         self.assertNotIn("Traceback", message)
 
@@ -432,7 +431,7 @@ class ProxyTimeoutTests(unittest.TestCase):
         self.assertIn("did not answer", message)
         self.assertIn("within 300s", message)
         self.assertIn("Do not retry this same request", message)
-        self.assertIn("summary or trips report", message)
+        self.assertNotIn("one device", message)
         self.assertIn("reports/route", message)
 
 

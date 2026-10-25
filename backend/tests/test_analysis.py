@@ -284,7 +284,8 @@ class SummaryWithStoredDataTests(unittest.TestCase):
         self.assertIn("You decide the next step", summary["next_step"])
         self.assertIn("file_can_be_analyzed", summary["next_step"])
         self.assertIn("analyze_data", summary["next_step"])
-        self.assertIn("one request per device", summary["next_step"])
+        self.assertIn("Do not retry this same call", summary["next_step"])
+        self.assertNotIn("device", summary["next_step"])
 
     def test_no_handle_or_hint_when_upload_failed(self):
         summary = _summarize_large_result([{"a": 1}], 10, None)
