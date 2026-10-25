@@ -28,11 +28,29 @@ from app.chat import _summarize_large_result
 def _fake_client():
     client = MagicMock()
     client.containers.create = AsyncMock(return_value=SimpleNamespace(id="cntr_1"))
+    created: list[SimpleNamespace] = []
 
     async def create_file(_container_id, file):
-        return SimpleNamespace(path=f"/mnt/data/{file[0]}")
+        record = SimpleNamespace(
+            id=f"cfile_{len(created)}",
+            path=f"/mnt/data/{file[0]}",
+            bytes=len(file[1]),
+            source="user",
+            container_id="cntr_1",
+        )
+        created.append(record)
+        return record
+
+    class _Page:
+        def __aiter__(self):
+            async def generate():
+                for item in created:
+                    yield item
+
+            return generate()
 
     client.containers.files.create = AsyncMock(side_effect=create_file)
+    client.containers.files.list = lambda container_id: _Page()
     return client
 
 
@@ -41,7 +59,12 @@ class StoreResultTests(unittest.IsolatedAsyncioTestCase):
         client = _fake_client()
         with patch("app.analysis.AsyncOpenAI", return_value=client):
             stored = await store_result([{"id": 1}, {"id": 2}])
-        self.assertEqual(stored, {"container_id": "cntr_1", "path": "/mnt/data/data.json"})
+        self.assertEqual(stored["container_id"], "cntr_1")
+        self.assertEqual(stored["path"], "/mnt/data/data.json")
+        self.assertEqual(stored["files"][0]["id"], "cfile_0")
+        self.assertEqual(stored["files"][0]["path"], "/mnt/data/data.json")
+        self.assertEqual(stored["files"][0]["source"], "user")
+        self.assertGreater(stored["files"][0]["bytes"], 0)
         create_kwargs = client.containers.create.await_args.kwargs
         self.assertEqual(
             create_kwargs["expires_after"],
@@ -205,7 +228,8 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_runs_analyst_with_code_interpreter_on_the_container(self):
         run = AsyncMock(return_value=SimpleNamespace(final_output="Max speed was 88 km/h."))
-        answer = await self._call(run)
+        with patch("app.analysis.SKIP_ANALYSIS", False):
+            answer = await self._call(run)
         self.assertEqual(answer, "Max speed was 88 km/h.")
         analyst, prompt = run.await_args.args
         self.assertIn("/mnt/data/data.json", prompt)
@@ -219,9 +243,18 @@ class AnalyzeDataTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tool.tool_config, {"type": "code_interpreter", "container": "cntr_1"})
 
     async def test_failure_returns_a_recoverable_message(self):
-        answer = await self._call(AsyncMock(side_effect=RuntimeError("expired")))
+        with patch("app.analysis.SKIP_ANALYSIS", False):
+            answer = await self._call(AsyncMock(side_effect=RuntimeError("expired")))
         self.assertIn("analysis failed", answer)
         self.assertIn("show_html", answer)
+
+    async def test_skip_analysis_does_not_call_the_analyst(self):
+        run = AsyncMock()
+        with patch("app.analysis.SKIP_ANALYSIS", True):
+            answer = await self._call(run)
+        run.assert_not_awaited()
+        self.assertIn("Analysis is turned off", answer)
+        self.assertIn("cntr_1", answer)
 
 
 class SummaryWithStoredDataTests(unittest.TestCase):
@@ -229,7 +262,8 @@ class SummaryWithStoredDataTests(unittest.TestCase):
         stored = {"container_id": "cntr_1", "path": "/mnt/data/data.json"}
         summary = _summarize_large_result([{"a": 1}], 10, stored)
         self.assertEqual(summary["stored_data"], stored)
-        self.assertIn("analyze_data", summary["next_step"])
+        self.assertIn("Do not call analyze_data", summary["next_step"])
+        self.assertIn("stored_data.files", summary["next_step"])
         self.assertIn("one request per device", summary["next_step"])
 
     def test_no_handle_or_hint_when_upload_failed(self):

@@ -83,7 +83,8 @@ class TurnBudgetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["fields"], ["deviceId", "id"])
         self.assertNotIn("total_items", result)
         self.assertIn("188000000", result["reason"])
-        self.assertIn("analyze_data", result["next_step"])
+        self.assertIn("Do not call analyze_data", result["next_step"])
+        self.assertIn("stored_data.files", result["next_step"])
         self.assertNotIn(gzip_payload.decode("latin1"), json.dumps(result))
         self.assertEqual(self.ctx.context.tool_result_bytes, 0)
 

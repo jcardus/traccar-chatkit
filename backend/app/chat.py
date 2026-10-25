@@ -34,7 +34,7 @@ from openai.types.responses import (
 from openai.types.responses.response_input_image_param import ResponseInputImageParam
 
 from .agent_context import TraccarAgentContext
-from .analysis import analyze_data, store_result, store_unparsed
+from .analysis import SKIP_ANALYSIS, analyze_data, store_result, store_unparsed
 from .attachments import REPORTS_DIR, TraccarAttachmentStore, attachment_to_input, public_base_url
 from .constants import INSTRUCTIONS, MAPBOX_ACCESS_TOKEN, MAPBOX_TOKEN_PLACEHOLDER, MODEL
 from .neon_store import NeonStore
@@ -630,6 +630,13 @@ def _summarize_large_result(
 
 
 def _large_result_next_step(stored: bool) -> str:
+    if stored and SKIP_ANALYSIS:
+        return (
+            "Do not call analyze_data. Do not retry this call or split it into one "
+            "request per device. The file is uploaded. stored_data.files is the "
+            "container's own listing. Tell the user the container id and each file's "
+            "id, path, and byte size. Do not compute an answer from the sample."
+        )
     if stored:
         return (
             "Do not retry this call or split it into one request per device. "

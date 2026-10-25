@@ -26,6 +26,9 @@ from .traccar import UnparsedBody
 
 logger = logging.getLogger(__name__)
 
+# Debug switch. The upload is listed back from the container, and the analyst
+# is not started. Turn this off to compute answers with analyze_data again.
+SKIP_ANALYSIS = True
 CONTAINER_IDLE_MINUTES = 20
 # OpenAI rejects container files at 50 MiB. Stay a little under that.
 MAX_CONTAINER_FILE_BYTES = 50 * 1024 * 1024 - 65_536
@@ -309,17 +312,34 @@ async def _upload_parts(parts: list[tuple[str, bytes, str]]) -> dict[str, str] |
             )
             path = uploaded.path
             uploaded_bytes += len(manifest)
+        files = await _listed_files(client, container.id)
     except Exception:
         logger.exception("Failed to store large result for analysis")
         return None
     logger.info(
-        "Stored large result in %s at %s (%d bytes uploaded, %d file(s))",
+        "Stored large result in %s at %s (%d bytes uploaded, %d file(s)); container lists %s",
         container.id,
         path,
         uploaded_bytes,
         len(uploaded_paths) if len(uploaded_paths) == 1 else len(uploaded_paths) + 1,
+        files,
     )
-    return {"container_id": container.id, "path": path}
+    return {"container_id": container.id, "path": path, "files": files}
+
+
+async def _listed_files(client, container_id: str) -> list[dict[str, Any]]:
+    """Read the container's own file list, so an upload is confirmed by a second call."""
+    listed: list[dict[str, Any]] = []
+    async for item in client.containers.files.list(container_id):
+        listed.append(
+            {
+                "id": item.id,
+                "path": item.path,
+                "bytes": item.bytes,
+                "source": item.source,
+            }
+        )
+    return listed
 
 
 async def store_result(result: Any) -> dict[str, str] | None:
@@ -356,6 +376,12 @@ async def store_unparsed(body: UnparsedBody) -> dict[str, str] | None:
 )
 async def analyze_data(container_id: str, path: str, question: str) -> str:
     logger.info("TOOL: analyze_data container=%s path=%s", container_id, path)
+    if SKIP_ANALYSIS:
+        return (
+            "Analysis is turned off. The file was uploaded and the container listed it. "
+            f"container_id={container_id} path={path}. "
+            "Tell the user those values and the file list from the upload. Do not estimate a count."
+        )
     start = time.monotonic()
     analyst = Agent(
         name="Data analyst",
