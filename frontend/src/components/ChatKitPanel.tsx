@@ -4,6 +4,12 @@ import {
   CHATKIT_API_DOMAIN_KEY,
 } from "../lib/config";
 import type { ColorScheme } from "../hooks/useColorScheme";
+import {
+  loadPrintableThread,
+  postChatkit,
+  printHtmlDocument,
+  renderPrintDocument,
+} from "../lib/printChat";
 import { useEffect, useRef } from "react";
 
 type ChatKitPanelProps = {
@@ -64,12 +70,52 @@ export function ChatKitPanel({
   // Guards against a fast thread switch resolving out of order and
   // clobbering the panel with a stale response.
   const latestThreadRef = useRef<string | null>(null);
+  const printingRef = useRef(false);
+
+  const printConversation = async () => {
+    const threadId = latestThreadRef.current;
+    if (!threadId) {
+      window.alert("Open a conversation before printing.");
+      return;
+    }
+    if (printingRef.current) return;
+    printingRef.current = true;
+    try {
+      const apiUrl = typeof CHATKIT_API_URL === "string" ? CHATKIT_API_URL : "/chatkit";
+      const printable = await loadPrintableThread(threadId, postChatkit(apiUrl));
+      if (printable.blocks.length === 0) {
+        window.alert("This conversation has nothing to print yet.");
+        return;
+      }
+      await printHtmlDocument(
+        renderPrintDocument({
+          title: printable.title,
+          printedAt: new Date(),
+          blocks: printable.blocks,
+        }),
+      );
+    } catch (error) {
+      console.error(error);
+      window.alert("Couldn't load this conversation to print.");
+    } finally {
+      printingRef.current = false;
+    }
+  };
 
   const chatkit = useChatKit({
     api: {
       url: CHATKIT_API_URL,
       domainKey: CHATKIT_API_DOMAIN_KEY,
       uploadStrategy: { type: "two_phase" },
+    },
+    // ChatKit's header icons have no printer. share is the export control.
+    header: {
+      rightAction: {
+        icon: "share",
+        onClick: () => {
+          void printConversation();
+        },
+      },
     },
     composer: {
       // Keep in sync with ALLOWED_MIME_TYPES / MAX_ATTACHMENT_BYTES in
