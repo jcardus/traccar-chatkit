@@ -82,7 +82,7 @@ def _tool_context():
 class ToolChainTests(unittest.IsolatedAsyncioTestCase):
     """Specialist first, forward_to_real_agent when it can't answer."""
 
-    async def _invoke(self, tool, **patches):
+    async def _invoke(self, tool, payload=None, **patches):
         with ExitStack() as stack:
             stack.enter_context(
                 patch("app.support.invoke", return_value={"email": "user@example.com"})
@@ -95,7 +95,9 @@ class ToolChainTests(unittest.IsolatedAsyncioTestCase):
             )
             for target, new in patches.items():
                 stack.enter_context(patch(target, new=new))
-            return await tool.on_invoke_tool(_tool_context(), json.dumps({"question": "hi"}))
+            return await tool.on_invoke_tool(
+                _tool_context(), json.dumps(payload or {"question": "hi"})
+            )
 
     async def test_specialist_answer_is_relayed(self):
         result = await self._invoke(
@@ -124,7 +126,13 @@ class ToolChainTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("forward_to_real_agent", result)
 
-    async def test_forward_sends_email(self):
+    async def test_forward_requires_user_name_before_sending_email(self):
+        boto3 = MagicMock()
+        result = await self._invoke(forward_to_real_agent, **{"app.support.boto3": boto3})
+        self.assertIn("Ask the user", result)
+        boto3.client.assert_not_called()
+
+    async def test_forward_sends_email_with_user_name(self):
         ses = MagicMock()
         ses.send_email.return_value = {
             "MessageId": "mid",
@@ -132,18 +140,27 @@ class ToolChainTests(unittest.IsolatedAsyncioTestCase):
         }
         boto3 = MagicMock()
         boto3.client.return_value = ses
-        result = await self._invoke(forward_to_real_agent, **{"app.support.boto3": boto3})
+        result = await self._invoke(
+            forward_to_real_agent,
+            payload={"question": "hi", "user_name": "Ada Lovelace"},
+            **{"app.support.boto3": boto3},
+        )
         self.assertIn("forwarded to our support team", result)
         ses.send_email.assert_called_once()
         _, kwargs = ses.send_email.call_args
         self.assertEqual(kwargs["Destination"], {"ToAddresses": ["support@fleetmap.io"]})
         self.assertIn("thread-1", kwargs["Message"]["Body"]["Text"]["Data"])
+        self.assertIn("Name: Ada Lovelace", kwargs["Message"]["Body"]["Text"]["Data"])
 
     async def test_forward_failure_gives_contact(self):
         boto3 = MagicMock()
         boto3.client.side_effect = RuntimeError("no network")
         with patch.dict(os.environ, {}, clear=True):
-            result = await self._invoke(forward_to_real_agent, **{"app.support.boto3": boto3})
+            result = await self._invoke(
+                forward_to_real_agent,
+                payload={"question": "hi", "user_name": "Ada"},
+                **{"app.support.boto3": boto3},
+            )
         self.assertIn("support@fleetmap.io", result)
 
 
