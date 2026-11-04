@@ -179,18 +179,21 @@ async def ask_support_specialist(ctx: RunContextWrapper[TraccarAgentContext], qu
 @function_tool(
     description_override=(
         "Forward the user question to a human support agent via email. If the user's name "
-        "has not been provided, ask for it before calling this tool again."
+        "(not a username) has not been provided, ask for it before calling this tool again."
     )
 )
 async def forward_to_real_agent(
-    ctx: RunContextWrapper[TraccarAgentContext], question: str, user_name: str | None = None
+    ctx: RunContextWrapper[TraccarAgentContext],
+    question: str,
+    person_name: str | None = None,
 ) -> str:
     """Escalate the user's question to a human via support email."""
-    user_name = user_name.strip() if user_name else ""
-    if not user_name:
+    person_name = person_name.strip() if person_name else ""
+    if not person_name:
         return (
-            "Do not forward the request yet. Ask the user what name to include for the "
-            "support team, then call this tool again with the name they provide."
+            "Do not forward the request yet. Ask the user for their name (the name of the "
+            "person using the assistant, not a username), then call this tool again with "
+            "the name they provide."
         )
 
     request = ctx.context.request_context.get("request")
@@ -216,7 +219,7 @@ async def forward_to_real_agent(
                 "Body": {
                     "Text": {
                         "Data": (
-                            f"Name: {user_name}\nUser: {user_email}\nThread: {thread_id}\n\n"
+                            f"Name: {person_name}\nUser: {user_email}\nThread: {thread_id}\n\n"
                             f"Conversation:\n{conversation}"
                         )
                     }

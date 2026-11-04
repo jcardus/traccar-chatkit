@@ -126,13 +126,13 @@ class ToolChainTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("forward_to_real_agent", result)
 
-    async def test_forward_requires_user_name_before_sending_email(self):
+    async def test_forward_requires_person_name_before_sending_email(self):
         boto3 = MagicMock()
         result = await self._invoke(forward_to_real_agent, **{"app.support.boto3": boto3})
         self.assertIn("Ask the user", result)
         boto3.client.assert_not_called()
 
-    async def test_forward_sends_email_with_user_name(self):
+    async def test_forward_sends_email_with_person_name(self):
         ses = MagicMock()
         ses.send_email.return_value = {
             "MessageId": "mid",
@@ -142,7 +142,7 @@ class ToolChainTests(unittest.IsolatedAsyncioTestCase):
         boto3.client.return_value = ses
         result = await self._invoke(
             forward_to_real_agent,
-            payload={"question": "hi", "user_name": "Ada Lovelace"},
+            payload={"question": "hi", "person_name": "Ada Lovelace"},
             **{"app.support.boto3": boto3},
         )
         self.assertIn("forwarded to our support team", result)
@@ -158,7 +158,7 @@ class ToolChainTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {}, clear=True):
             result = await self._invoke(
                 forward_to_real_agent,
-                payload={"question": "hi", "user_name": "Ada"},
+                payload={"question": "hi", "person_name": "Ada"},
                 **{"app.support.boto3": boto3},
             )
         self.assertIn("support@fleetmap.io", result)
